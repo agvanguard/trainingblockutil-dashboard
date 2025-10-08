@@ -37,7 +37,8 @@
         };
 
         function showUploadScreen() {
-            const downloadUrl = `https://drive.google.com/uc?export=download&id=${GOOGLE_DRIVE_FILE_ID}`;
+            // Google Sheets export URL (exports as Excel)
+            const downloadUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_DRIVE_FILE_ID}/export?format=xlsx`;
             
             document.getElementById('app').innerHTML = `
                 <div class="w-full min-h-screen flex items-center justify-center p-6">
