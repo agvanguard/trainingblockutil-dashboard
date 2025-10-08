@@ -5,501 +5,460 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Training Block Utilization Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/recharts@2.5.0/dist/Recharts.js"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100">
+    <div id="app"></div>
     
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
-        const { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
-        const { Filter, RefreshCw, HelpCircle, X } = lucide;
-
+    <script>
         const GOOGLE_SCRIPT_URL = 'https://script.google.com/a/macros/canva.com/s/AKfycbyePZwBPVZwO_Img0fHdyNYcT8Fjoe111sZqVpuXyV33fXnFJz7Usg6Vgr7QkhRCHhw/exec';
 
-        const TrainingBlockDashboard = () => {
-          const [rawData, setRawData] = useState([]);
-          const [filteredData, setFilteredData] = useState([]);
-          const [viewMode, setViewMode] = useState('weekly');
-          const [filters, setFilters] = useState({ coach: 'All', team: 'All', subgroup: 'All', month: 'All', week: 'All' });
-          const [showHelp, setShowHelp] = useState(false);
-          const [isLoading, setIsLoading] = useState(true);
-          const [loadError, setLoadError] = useState('');
-          const [lastUpdated, setLastUpdated] = useState(null);
+        let rawData = [];
+        let filteredData = [];
+        let viewMode = 'weekly';
+        let filters = { coach: 'All', team: 'All', subgroup: 'All', month: 'All', week: 'All' };
+        let charts = { trend: null, subgroup: null, team: null, coach: null };
 
-          const excelDateToJSDate = (serial) => {
+        const excelDateToJSDate = (serial) => {
             if (!serial || isNaN(serial)) return null;
-            const daysFromEpoch = serial - 1;
             const excelEpoch = new Date(1900, 0, 1);
             const result = new Date(excelEpoch);
-            result.setDate(result.getDate() + daysFromEpoch + 1);
+            result.setDate(result.getDate() + serial);
             return new Date(result.getFullYear(), result.getMonth(), result.getDate());
-          };
-
-          useEffect(() => { loadDataFromGoogleDrive(); }, []);
-
-          const loadDataFromGoogleDrive = async () => {
-            setIsLoading(true);
-            setLoadError('');
-            try {
-              const response = await fetch(GOOGLE_SCRIPT_URL);
-              if (!response.ok) throw new Error('Failed to fetch data from Google Drive');
-              const jsonData = await response.json();
-              if (jsonData.error) throw new Error(jsonData.error);
-
-              const processedData = jsonData.map(row => {
-                let weekStartDate = null;
-                const weekStartValue = row["Week Start"];
-                if (weekStartValue) {
-                  if (typeof weekStartValue === 'number') weekStartDate = excelDateToJSDate(weekStartValue);
-                  else if (weekStartValue instanceof Date) weekStartDate = weekStartValue;
-                  else if (typeof weekStartValue === 'string') weekStartDate = new Date(weekStartValue);
-                }
-                return {
-                  weeklyYearMonth: row["Year - Month"] || "",
-                  weekStart: weekStartDate,
-                  weeklySubgroup: row.Subgroup || "",
-                  weeklyCoach: row.Coach || "",
-                  weeklyTeam: row.Team || "",
-                  agentName: row["Agent Name"] || "",
-                  weeklyTrainingHours: parseFloat(row["Training Total Hours"]) || 0,
-                  weeklyBlockHours: parseFloat(row["Total Training Block Hours"]) || 0,
-                  monthlyYearMonth: row["Year - Month_1"] || "",
-                  monthlySubgroup: row["Subgroup_1"] || "",
-                  monthlyTrainingHours: parseFloat(row["Training Total Hours_1"]) || 0,
-                  monthlyBlockHours: parseFloat(row["Total Training Block Hours_1"]) || 0,
-                  monthlyCoach: row["Coach_1"] || row.Coach || "",
-                  monthlyTeam: row["Team_1"] || row.Team || ""
-                };
-              }).filter(row => row.weekStart && !isNaN(row.weekStart));
-
-              setRawData(processedData);
-              setFilteredData(processedData);
-              setLastUpdated(new Date());
-              setIsLoading(false);
-            } catch (error) {
-              setLoadError(error.message);
-              setIsLoading(false);
-            }
-          };
-
-          const filterOptions = useMemo(() => {
-            const isWeekly = viewMode === 'weekly';
-            const coaches = [...new Set(rawData.map(d => isWeekly ? d.weeklyCoach : d.monthlyCoach).filter(c => c && c !== "#N/A"))].sort();
-            const teams = [...new Set(rawData.map(d => isWeekly ? d.weeklyTeam : d.monthlyTeam).filter(t => t && t !== "#N/A"))].sort();
-            const subgroups = [...new Set(rawData.map(d => isWeekly ? d.weeklySubgroup : d.monthlySubgroup).filter(s => s && s !== "#N/A"))].sort();
-            const weeks = [...new Set(rawData.filter(d => d.weekStart).map(d => {
-              const y = d.weekStart.getFullYear();
-              const m = String(d.weekStart.getMonth() + 1).padStart(2, '0');
-              const day = String(d.weekStart.getDate()).padStart(2, '0');
-              return `${y}-${m}-${day}`;
-            }))].sort();
-            const months = [...new Set(rawData.map(d => isWeekly ? d.weeklyYearMonth : d.monthlyYearMonth).filter(m => m && m !== "#N/A"))].sort();
-            return { coaches, teams, subgroups, weeks, months };
-          }, [rawData, viewMode]);
-
-          useEffect(() => {
-            let filtered = [...rawData];
-            const isWeekly = viewMode === 'weekly';
-            if (filters.coach !== 'All') filtered = filtered.filter(d => (isWeekly ? d.weeklyCoach : d.monthlyCoach) === filters.coach);
-            if (filters.team !== 'All') filtered = filtered.filter(d => (isWeekly ? d.weeklyTeam : d.monthlyTeam) === filters.team);
-            if (filters.subgroup !== 'All') filtered = filtered.filter(d => (isWeekly ? d.weeklySubgroup : d.monthlySubgroup) === filters.subgroup);
-            if (!isWeekly && filters.month !== 'All') filtered = filtered.filter(d => d.monthlyYearMonth === filters.month);
-            if (isWeekly && filters.week !== 'All') {
-              filtered = filtered.filter(d => {
-                if (!d.weekStart) return false;
-                const y = d.weekStart.getFullYear();
-                const m = String(d.weekStart.getMonth() + 1).padStart(2, '0');
-                const day = String(d.weekStart.getDate()).padStart(2, '0');
-                return `${y}-${m}-${day}` === filters.week;
-              });
-            }
-            setFilteredData(filtered);
-          }, [filters, rawData, viewMode]);
-
-          const overallMetrics = useMemo(() => {
-            if (filteredData.length === 0) return { utilization: 0, totalTrainingHours: 0, totalBlockHours: 0 };
-            const isWeekly = viewMode === 'weekly';
-            const totalTrainingHours = filteredData.reduce((sum, d) => sum + (isWeekly ? d.weeklyTrainingHours : d.monthlyTrainingHours), 0);
-            const totalBlockHours = filteredData.reduce((sum, d) => sum + (isWeekly ? d.weeklyBlockHours : d.monthlyBlockHours), 0);
-            const utilization = totalBlockHours > 0 ? (totalTrainingHours / totalBlockHours) * 100 : 0;
-            return { utilization: utilization.toFixed(2), totalTrainingHours: totalTrainingHours.toFixed(1), totalBlockHours: totalBlockHours.toFixed(1) };
-          }, [filteredData, viewMode]);
-
-          const subgroupMetrics = useMemo(() => {
-            if (filteredData.length === 0) return [];
-            const isWeekly = viewMode === 'weekly';
-            const grouped = filteredData.reduce((acc, row) => {
-              const subgroup = isWeekly ? row.weeklySubgroup : row.monthlySubgroup;
-              if (!subgroup || subgroup === "#N/A") return acc;
-              if (!acc[subgroup]) acc[subgroup] = { name: subgroup, trainingHours: 0, blockHours: 0, count: 0 };
-              acc[subgroup].trainingHours += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
-              acc[subgroup].blockHours += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
-              acc[subgroup].count += 1;
-              return acc;
-            }, {});
-            const subgroupData = Object.values(grouped).map(g => ({
-              name: g.name,
-              utilization: g.blockHours > 0 ? ((g.trainingHours / g.blockHours) * 100).toFixed(2) : '0.00',
-              trainingHours: g.trainingHours.toFixed(1),
-              blockHours: g.blockHours.toFixed(1),
-              count: g.count
-            })).sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
-            const totalTrainingHours = subgroupData.reduce((sum, g) => sum + parseFloat(g.trainingHours), 0);
-            const totalBlockHours = subgroupData.reduce((sum, g) => sum + parseFloat(g.blockHours), 0);
-            const overallUtilization = totalBlockHours > 0 ? ((totalTrainingHours / totalBlockHours) * 100).toFixed(2) : '0.00';
-            return [{ name: 'Overall', utilization: overallUtilization, trainingHours: totalTrainingHours.toFixed(1), blockHours: totalBlockHours.toFixed(1), count: subgroupData.reduce((sum, g) => sum + g.count, 0) }, ...subgroupData];
-          }, [filteredData, viewMode]);
-
-          const teamMetrics = useMemo(() => {
-            if (filteredData.length === 0) return [];
-            const isWeekly = viewMode === 'weekly';
-            const grouped = filteredData.reduce((acc, row) => {
-              const team = isWeekly ? row.weeklyTeam : row.monthlyTeam;
-              if (!team || team === "#N/A") return acc;
-              if (!acc[team]) acc[team] = { name: team, trainingHours: 0, blockHours: 0 };
-              acc[team].trainingHours += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
-              acc[team].blockHours += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
-              return acc;
-            }, {});
-            return Object.values(grouped).map(g => ({
-              name: g.name.length > 30 ? g.name.substring(0, 30) + '...' : g.name,
-              utilization: g.blockHours > 0 ? ((g.trainingHours / g.blockHours) * 100).toFixed(2) : '0.00',
-              trainingHours: g.trainingHours.toFixed(1),
-              blockHours: g.blockHours.toFixed(1)
-            })).sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
-          }, [filteredData, viewMode]);
-
-          const coachMetrics = useMemo(() => {
-            if (filteredData.length === 0) return [];
-            const isWeekly = viewMode === 'weekly';
-            const grouped = filteredData.reduce((acc, row) => {
-              const coach = isWeekly ? row.weeklyCoach : row.monthlyCoach;
-              if (!coach || coach === "#N/A") return acc;
-              if (!acc[coach]) acc[coach] = { name: coach, trainingHours: 0, blockHours: 0 };
-              acc[coach].trainingHours += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
-              acc[coach].blockHours += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
-              return acc;
-            }, {});
-            return Object.values(grouped).map(g => ({
-              name: g.name.length > 25 ? g.name.substring(0, 25) + '...' : g.name,
-              utilization: g.blockHours > 0 ? ((g.trainingHours / g.blockHours) * 100).toFixed(2) : '0.00',
-              trainingHours: g.trainingHours.toFixed(1),
-              blockHours: g.blockHours.toFixed(1)
-            })).sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
-          }, [filteredData, viewMode]);
-
-          const timeTrend = useMemo(() => {
-            if (filteredData.length === 0) return [];
-            const isWeekly = viewMode === 'weekly';
-            const grouped = filteredData.reduce((acc, row) => {
-              const timeKey = isWeekly ? (row.weekStart ? (() => {
-                const y = row.weekStart.getFullYear();
-                const m = String(row.weekStart.getMonth() + 1).padStart(2, '0');
-                const d = String(row.weekStart.getDate()).padStart(2, '0');
-                return `${y}-${m}-${d}`;
-              })() : null) : row.monthlyYearMonth;
-              if (!timeKey) return acc;
-              if (!acc[timeKey]) acc[timeKey] = { time: timeKey, trainingHours: 0, blockHours: 0 };
-              acc[timeKey].trainingHours += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
-              acc[timeKey].blockHours += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
-              return acc;
-            }, {});
-            let allData = Object.values(grouped).map(t => ({
-              time: t.time,
-              utilization: t.blockHours > 0 ? ((t.trainingHours / t.blockHours) * 100).toFixed(1) : 0
-            })).sort((a, b) => a.time.localeCompare(b.time));
-            if (isWeekly && allData.length > 0) {
-              const latestWeek = filters.week !== 'All' ? filters.week : allData[allData.length - 1].time;
-              const latestIndex = allData.findIndex(d => d.time === latestWeek);
-              if (latestIndex >= 0) allData = allData.slice(Math.max(0, latestIndex - 7), latestIndex + 1);
-            }
-            return allData;
-          }, [filteredData, viewMode, filters.week]);
-
-          if (isLoading) {
-            return React.createElement('div', { className: "w-full min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center" },
-              React.createElement('div', { className: "text-center" },
-                React.createElement(RefreshCw, { className: "text-blue-600 animate-spin mx-auto mb-4", size: 48 }),
-                React.createElement('p', { className: "text-xl font-semibold text-slate-800" }, "Loading Training Data..."),
-                React.createElement('p', { className: "text-sm text-slate-600 mt-2" }, "Fetching data from Google Drive")
-              )
-            );
-          }
-
-          if (loadError) {
-            return React.createElement('div', { className: "w-full min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-6" },
-              React.createElement('div', { className: "max-w-2xl bg-white rounded-lg shadow-lg p-8" },
-                React.createElement('div', { className: "text-center" },
-                  React.createElement('div', { className: "text-red-600 mb-4" },
-                    React.createElement(X, { size: 64, className: "mx-auto" })
-                  ),
-                  React.createElement('h2', { className: "text-2xl font-bold text-slate-800 mb-4" }, "Error Loading Data"),
-                  React.createElement('p', { className: "text-slate-600 mb-6" }, loadError),
-                  React.createElement('button', { onClick: loadDataFromGoogleDrive, className: "bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold" }, "Try Again")
-                )
-              )
-            );
-          }
-
-          return React.createElement('div', { className: "w-full min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6" },
-            React.createElement('div', { className: "max-w-7xl mx-auto" },
-              React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6 mb-6" },
-                React.createElement('div', { className: "flex justify-between items-center" },
-                  React.createElement('div', null,
-                    React.createElement('h1', { className: "text-3xl font-bold text-slate-800 mb-2" }, "Training Block Utilization Dashboard"),
-                    React.createElement('p', { className: "text-slate-600" }, `Auto-refreshing from Google Drive • Last updated: ${lastUpdated?.toLocaleString()}`)
-                  ),
-                  React.createElement('div', { className: "flex gap-2" },
-                    React.createElement('button', { onClick: () => setShowHelp(true), className: "flex items-center gap-2 bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700" },
-                      React.createElement(HelpCircle, { size: 20 }), "Help"
-                    ),
-                    React.createElement('button', { onClick: loadDataFromGoogleDrive, className: "flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700" },
-                      React.createElement(RefreshCw, { size: 20 }), "Refresh Data"
-                    )
-                  )
-                ),
-                showHelp && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" },
-                  React.createElement('div', { className: "bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" },
-                    React.createElement('div', { className: "sticky top-0 bg-white border-b p-6 flex justify-between items-center" },
-                      React.createElement('h3', { className: "text-2xl font-bold" }, "📊 Dashboard Help"),
-                      React.createElement('button', { onClick: () => setShowHelp(false), className: "text-slate-500 hover:text-slate-700" },
-                        React.createElement(X, { size: 24 })
-                      )
-                    ),
-                    React.createElement('div', { className: "p-6 space-y-4" },
-                      React.createElement('div', null,
-                        React.createElement('h4', { className: "font-semibold mb-2" }, "🔄 Auto-Refresh"),
-                        React.createElement('p', { className: "text-slate-700 text-sm" }, "Dashboard automatically loads from Google Drive. Click 'Refresh Data' for latest updates.")
-                      ),
-                      React.createElement('div', null,
-                        React.createElement('h4', { className: "font-semibold mb-2" }, "📈 Utilization Formula"),
-                        React.createElement('p', { className: "bg-slate-50 p-2 rounded text-sm font-mono" }, "(Training Hours ÷ Block Hours) × 100")
-                      ),
-                      React.createElement('div', null,
-                        React.createElement('h4', { className: "font-semibold mb-2" }, "🎨 Color Coding"),
-                        React.createElement('ul', { className: "space-y-1 text-sm" },
-                          React.createElement('li', null, React.createElement('span', { className: "text-green-600 font-semibold" }, "Green:"), " ≥50%"),
-                          React.createElement('li', null, React.createElement('span', { className: "text-yellow-600 font-semibold" }, "Yellow:"), " 1-49%"),
-                          React.createElement('li', null, React.createElement('span', { className: "text-red-600 font-semibold" }, "Red:"), " <1%")
-                        )
-                      )
-                    )
-                  )
-                ),
-                React.createElement('div', { className: "mt-4 flex gap-2" },
-                  React.createElement('button', { onClick: () => { setViewMode('weekly'); setFilters({...filters, month: 'All'}); }, className: `px-6 py-2 rounded-lg font-semibold ${viewMode === 'weekly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}` }, "Weekly View"),
-                  React.createElement('button', { onClick: () => { setViewMode('monthly'); setFilters({...filters, week: 'All'}); }, className: `px-6 py-2 rounded-lg font-semibold ${viewMode === 'monthly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}` }, "Monthly View")
-                )
-              ),
-              React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6 mb-6" },
-                React.createElement('div', { className: "flex items-center gap-2 mb-4" },
-                  React.createElement(Filter, { className: "text-blue-600", size: 20 }),
-                  React.createElement('h2', { className: "text-xl font-semibold" }, "Filters")
-                ),
-                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" },
-                  React.createElement('div', null,
-                    React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Coach"),
-                    React.createElement('select', { value: filters.coach, onChange: (e) => setFilters({...filters, coach: e.target.value}), className: "w-full p-2 border rounded-lg" },
-                      React.createElement('option', { value: "All" }, "All Coaches"),
-                      filterOptions.coaches.map(c => React.createElement('option', { key: c, value: c }, c))
-                    )
-                  ),
-                  React.createElement('div', null,
-                    React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Team"),
-                    React.createElement('select', { value: filters.team, onChange: (e) => setFilters({...filters, team: e.target.value}), className: "w-full p-2 border rounded-lg" },
-                      React.createElement('option', { value: "All" }, "All Teams"),
-                      filterOptions.teams.map(t => React.createElement('option', { key: t, value: t }, t))
-                    )
-                  ),
-                  React.createElement('div', null,
-                    React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Subgroup"),
-                    React.createElement('select', { value: filters.subgroup, onChange: (e) => setFilters({...filters, subgroup: e.target.value}), className: "w-full p-2 border rounded-lg" },
-                      React.createElement('option', { value: "All" }, "All Subgroups"),
-                      filterOptions.subgroups.map(s => React.createElement('option', { key: s, value: s }, s))
-                    )
-                  ),
-                  viewMode === 'monthly' ? React.createElement('div', null,
-                    React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Month"),
-                    React.createElement('select', { value: filters.month, onChange: (e) => setFilters({...filters, month: e.target.value}), className: "w-full p-2 border rounded-lg" },
-                      React.createElement('option', { value: "All" }, "All Months"),
-                      filterOptions.months.map(m => React.createElement('option', { key: m, value: m }, m))
-                    )
-                  ) : React.createElement('div', null,
-                    React.createElement('label', { className: "block text-sm font-medium mb-2" }, "Week"),
-                    React.createElement('select', { value: filters.week, onChange: (e) => setFilters({...filters, week: e.target.value}), className: "w-full p-2 border rounded-lg" },
-                      React.createElement('option', { value: "All" }, "All Weeks"),
-                      filterOptions.weeks.map(w => React.createElement('option', { key: w, value: w }, w))
-                    )
-                  )
-                )
-              ),
-              React.createElement('div', { className: "bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-6 mb-6 text-white" },
-                React.createElement('h2', { className: "text-2xl font-bold mb-4" }, `Overall ${viewMode === 'weekly' ? 'Weekly' : 'Monthly'} Utilization`),
-                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-6" },
-                  React.createElement('div', null,
-                    React.createElement('p', { className: "text-indigo-100 text-sm mb-2" }, "Total Training Hours"),
-                    React.createElement('p', { className: "text-3xl font-bold" }, overallMetrics.totalTrainingHours)
-                  ),
-                  React.createElement('div', null,
-                    React.createElement('p', { className: "text-indigo-100 text-sm mb-2" }, "Total Block Hours"),
-                    React.createElement('p', { className: "text-3xl font-bold" }, overallMetrics.totalBlockHours)
-                  ),
-                  React.createElement('div', null,
-                    React.createElement('p', { className: "text-indigo-100 text-sm mb-2" }, "Utilization Rate"),
-                    React.createElement('p', { className: "text-3xl font-bold" }, `${overallMetrics.utilization}%`)
-                  )
-                ),
-                React.createElement('p', { className: "mt-4 text-indigo-100 text-sm" }, `(Training Hours ÷ Block Hours) × 100 ${viewMode === 'weekly' ? '| Columns G & H' : '| Columns T & U'}`)
-              ),
-              React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6 mb-6" },
-                React.createElement('h3', { className: "text-lg font-semibold mb-4" }, viewMode === 'weekly' ? 'Weekly Utilization Trend (Last 8 Weeks)' : 'Monthly Utilization Trend'),
-                timeTrend.length > 0 ? React.createElement(ResponsiveContainer, { width: "100%", height: 300 },
-                  React.createElement(LineChart, { data: timeTrend },
-                    React.createElement(CartesianGrid, { strokeDasharray: "3 3" }),
-                    React.createElement(XAxis, { dataKey: "time", angle: -45, textAnchor: "end", height: 80, style: {fontSize: 12} }),
-                    React.createElement(YAxis, null),
-                    React.createElement(Tooltip, null),
-                    React.createElement(Legend, null),
-                    React.createElement(Line, { type: "monotone", dataKey: "utilization", stroke: "#3b82f6", strokeWidth: 2, name: "Utilization %" })
-                  )
-                ) : React.createElement('div', { className: "flex items-center justify-center h-64 text-slate-500" },
-                  React.createElement('p', null, "No trend data available")
-                )
-              ),
-              React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" },
-                React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6" },
-                  React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Utilization by Subgroup"),
-                  React.createElement(ResponsiveContainer, { width: "100%", height: Math.max(300, subgroupMetrics.length * 40) },
-                    React.createElement(BarChart, { data: subgroupMetrics, layout: "vertical" },
-                      React.createElement(CartesianGrid, { strokeDasharray: "3 3" }),
-                      React.createElement(XAxis, { type: "number" }),
-                      React.createElement(YAxis, { dataKey: "name", type: "category", width: 150, style: {fontSize: 11} }),
-                      React.createElement(Tooltip, null),
-                      React.createElement(Legend, null),
-                      React.createElement(Bar, { dataKey: "utilization", fill: "#10b981", name: "Utilization %" })
-                    )
-                  )
-                ),
-                React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6" },
-                  React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Utilization by Team (All Teams)"),
-                  React.createElement(ResponsiveContainer, { width: "100%", height: Math.max(300, teamMetrics.length * 40) },
-                    React.createElement(BarChart, { data: teamMetrics, layout: "vertical" },
-                      React.createElement(CartesianGrid, { strokeDasharray: "3 3" }),
-                      React.createElement(XAxis, { type: "number" }),
-                      React.createElement(YAxis, { dataKey: "name", type: "category", width: 150, style: {fontSize: 11} }),
-                      React.createElement(Tooltip, null),
-                      React.createElement(Legend, null),
-                      React.createElement(Bar, { dataKey: "utilization", fill: "#f59e0b", name: "Utilization %" })
-                    )
-                  )
-                )
-              ),
-              React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6 mb-6" },
-                React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Utilization by Coach (All Coaches)"),
-                React.createElement(ResponsiveContainer, { width: "100%", height: Math.max(300, coachMetrics.length * 40) },
-                  React.createElement(BarChart, { data: coachMetrics, layout: "vertical" },
-                    React.createElement(CartesianGrid, { strokeDasharray: "3 3" }),
-                    React.createElement(XAxis, { type: "number" }),
-                    React.createElement(YAxis, { dataKey: "name", type: "category", width: 150, style: {fontSize: 11} }),
-                    React.createElement(Tooltip, null),
-                    React.createElement(Legend, null),
-                    React.createElement(Bar, { dataKey: "utilization", fill: "#8b5cf6", name: "Utilization %" })
-                  )
-                )
-              ),
-              React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
-                React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6" },
-                  React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Subgroup Summary"),
-                  React.createElement('div', { className: "overflow-auto max-h-96" },
-                    React.createElement('table', { className: "w-full text-sm" },
-                      React.createElement('thead', { className: "sticky top-0 bg-slate-100" },
-                        React.createElement('tr', null,
-                          React.createElement('th', { className: "px-3 py-2 text-left font-semibold" }, "Subgroup"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Training"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Block"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Util %")
-                        )
-                      ),
-                      React.createElement('tbody', null,
-                        subgroupMetrics.map((row, idx) =>
-                          React.createElement('tr', { key: idx, className: `border-b hover:bg-slate-50 ${row.name === 'Overall' ? 'bg-blue-50 font-semibold' : ''}` },
-                            React.createElement('td', { className: "px-3 py-2" }, row.name),
-                            React.createElement('td', { className: "px-3 py-2 text-right" }, row.trainingHours),
-                            React.createElement('td', { className: "px-3 py-2 text-right" }, row.blockHours),
-                            React.createElement('td', { className: "px-3 py-2 text-right" },
-                              React.createElement('span', { className: `font-semibold ${parseFloat(row.utilization) >= 50 ? 'text-green-600' : parseFloat(row.utilization) >= 1 ? 'text-yellow-600' : 'text-red-600'}` }, `${row.utilization}%`)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                ),
-                React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6" },
-                  React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Team Summary"),
-                  React.createElement('div', { className: "overflow-auto max-h-96" },
-                    React.createElement('table', { className: "w-full text-sm" },
-                      React.createElement('thead', { className: "sticky top-0 bg-slate-100" },
-                        React.createElement('tr', null,
-                          React.createElement('th', { className: "px-3 py-2 text-left font-semibold" }, "Team"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Training"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Block"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Util %")
-                        )
-                      ),
-                      React.createElement('tbody', null,
-                        teamMetrics.map((row, idx) =>
-                          React.createElement('tr', { key: idx, className: "border-b hover:bg-slate-50" },
-                            React.createElement('td', { className: "px-3 py-2" }, row.name),
-                            React.createElement('td', { className: "px-3 py-2 text-right" }, row.trainingHours),
-                            React.createElement('td', { className: "px-3 py-2 text-right" }, row.blockHours),
-                            React.createElement('td', { className: "px-3 py-2 text-right" },
-                              React.createElement('span', { className: `font-semibold ${parseFloat(row.utilization) >= 50 ? 'text-green-600' : parseFloat(row.utilization) >= 1 ? 'text-yellow-600' : 'text-red-600'}` }, `${row.utilization}%`)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                ),
-                React.createElement('div', { className: "bg-white rounded-lg shadow-lg p-6" },
-                  React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Coach Summary"),
-                  React.createElement('div', { className: "overflow-auto max-h-96" },
-                    React.createElement('table', { className: "w-full text-sm" },
-                      React.createElement('thead', { className: "sticky top-0 bg-slate-100" },
-                        React.createElement('tr', null,
-                          React.createElement('th', { className: "px-3 py-2 text-left font-semibold" }, "Coach"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Training"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Block"),
-                          React.createElement('th', { className: "px-3 py-2 text-right font-semibold" }, "Util %")
-                        )
-                      ),
-                      React.createElement('tbody', null,
-                        coachMetrics.map((row, idx) =>
-                          React.createElement('tr', { key: idx, className: "border-b hover:bg-slate-50" },
-                            React.createElement('td', { className: "px-3 py-2" }, row.name),
-                            React.createElement('td', { className: "px-3 py-2 text-right" }, row.trainingHours),
-                            React.createElement('td', { className: "px-3 py-2 text-right" }, row.blockHours),
-                            React.createElement('td', { className: "px-3 py-2 text-right" },
-                              React.createElement('span', { className: `font-semibold ${parseFloat(row.utilization) >= 50 ? 'text-green-600' : parseFloat(row.utilization) >= 1 ? 'text-yellow-600' : 'text-red-600'}` }, `${row.utilization}%`)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          );
         };
 
-        ReactDOM.render(React.createElement(TrainingBlockDashboard), document.getElementById('root'));
+        const formatDate = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+
+        async function loadData() {
+            document.getElementById('app').innerHTML = `
+                <div class="w-full min-h-screen flex items-center justify-center">
+                    <div class="text-center">
+                        <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
+                        <p class="text-2xl font-semibold text-slate-800">Loading Training Data...</p>
+                        <p class="text-sm text-slate-600 mt-2">Fetching from Google Drive</p>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL);
+                if (!response.ok) throw new Error('Failed to fetch data from Google Drive');
+                const jsonData = await response.json();
+                if (jsonData.error) throw new Error(jsonData.error);
+
+                rawData = jsonData.map(row => {
+                    let weekStartDate = null;
+                    const weekStartValue = row["Week Start"];
+                    if (weekStartValue) {
+                        if (typeof weekStartValue === 'number') weekStartDate = excelDateToJSDate(weekStartValue);
+                        else if (weekStartValue instanceof Date) weekStartDate = weekStartValue;
+                        else if (typeof weekStartValue === 'string') weekStartDate = new Date(weekStartValue);
+                    }
+                    return {
+                        weeklyYearMonth: row["Year - Month"] || "",
+                        weekStart: weekStartDate,
+                        weeklySubgroup: row.Subgroup || "",
+                        weeklyCoach: row.Coach || "",
+                        weeklyTeam: row.Team || "",
+                        agentName: row["Agent Name"] || "",
+                        weeklyTrainingHours: parseFloat(row["Training Total Hours"]) || 0,
+                        weeklyBlockHours: parseFloat(row["Total Training Block Hours"]) || 0,
+                        monthlyYearMonth: row["Year - Month_1"] || "",
+                        monthlySubgroup: row["Subgroup_1"] || "",
+                        monthlyTrainingHours: parseFloat(row["Training Total Hours_1"]) || 0,
+                        monthlyBlockHours: parseFloat(row["Total Training Block Hours_1"]) || 0,
+                        monthlyCoach: row["Coach_1"] || row.Coach || "",
+                        monthlyTeam: row["Team_1"] || row.Team || ""
+                    };
+                }).filter(row => row.weekStart && !isNaN(row.weekStart));
+
+                filteredData = [...rawData];
+                renderDashboard();
+            } catch (error) {
+                document.getElementById('app').innerHTML = `
+                    <div class="w-full min-h-screen flex items-center justify-center p-6">
+                        <div class="max-w-2xl bg-white rounded-lg shadow-lg p-8 text-center">
+                            <div class="text-red-600 mb-4 text-6xl">✕</div>
+                            <h2 class="text-2xl font-bold mb-4">Error Loading Data</h2>
+                            <p class="text-slate-600 mb-6">${error.message}</p>
+                            <button onclick="loadData()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold">
+                                Try Again
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function applyFilters() {
+            filteredData = [...rawData];
+            const isWeekly = viewMode === 'weekly';
+            
+            if (filters.coach !== 'All') filteredData = filteredData.filter(d => (isWeekly ? d.weeklyCoach : d.monthlyCoach) === filters.coach);
+            if (filters.team !== 'All') filteredData = filteredData.filter(d => (isWeekly ? d.weeklyTeam : d.monthlyTeam) === filters.team);
+            if (filters.subgroup !== 'All') filteredData = filteredData.filter(d => (isWeekly ? d.weeklySubgroup : d.monthlySubgroup) === filters.subgroup);
+            if (!isWeekly && filters.month !== 'All') filteredData = filteredData.filter(d => d.monthlyYearMonth === filters.month);
+            if (isWeekly && filters.week !== 'All') filteredData = filteredData.filter(d => d.weekStart && formatDate(d.weekStart) === filters.week);
+            
+            renderDashboard();
+        }
+
+        function getFilterOptions() {
+            const isWeekly = viewMode === 'weekly';
+            return {
+                coaches: [...new Set(rawData.map(d => isWeekly ? d.weeklyCoach : d.monthlyCoach).filter(c => c && c !== "#N/A"))].sort(),
+                teams: [...new Set(rawData.map(d => isWeekly ? d.weeklyTeam : d.monthlyTeam).filter(t => t && t !== "#N/A"))].sort(),
+                subgroups: [...new Set(rawData.map(d => isWeekly ? d.weeklySubgroup : d.monthlySubgroup).filter(s => s && s !== "#N/A"))].sort(),
+                weeks: [...new Set(rawData.filter(d => d.weekStart).map(d => formatDate(d.weekStart)))].sort(),
+                months: [...new Set(rawData.map(d => isWeekly ? d.weeklyYearMonth : d.monthlyYearMonth).filter(m => m && m !== "#N/A"))].sort()
+            };
+        }
+
+        function calculateMetrics() {
+            if (filteredData.length === 0) return { overall: { utilization: 0, trainingHours: 0, blockHours: 0 }, subgroups: [], teams: [], coaches: [], trend: [] };
+            
+            const isWeekly = viewMode === 'weekly';
+            const totalTraining = filteredData.reduce((sum, d) => sum + (isWeekly ? d.weeklyTrainingHours : d.monthlyTrainingHours), 0);
+            const totalBlock = filteredData.reduce((sum, d) => sum + (isWeekly ? d.weeklyBlockHours : d.monthlyBlockHours), 0);
+
+            // Subgroups
+            const subgroupGroups = {};
+            filteredData.forEach(row => {
+                const key = isWeekly ? row.weeklySubgroup : row.monthlySubgroup;
+                if (!key || key === "#N/A") return;
+                if (!subgroupGroups[key]) subgroupGroups[key] = { training: 0, block: 0 };
+                subgroupGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
+                subgroupGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
+            });
+            const subgroups = Object.entries(subgroupGroups).map(([name, d]) => ({
+                name, training: d.training.toFixed(1), block: d.block.toFixed(1),
+                utilization: (d.block > 0 ? (d.training / d.block) * 100 : 0).toFixed(2)
+            })).sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
+
+            const subgroupOverall = {
+                name: 'Overall',
+                training: subgroups.reduce((sum, s) => sum + parseFloat(s.training), 0).toFixed(1),
+                block: subgroups.reduce((sum, s) => sum + parseFloat(s.block), 0).toFixed(1),
+                utilization: totalBlock > 0 ? ((totalTraining / totalBlock) * 100).toFixed(2) : '0.00'
+            };
+
+            // Teams
+            const teamGroups = {};
+            filteredData.forEach(row => {
+                const key = isWeekly ? row.weeklyTeam : row.monthlyTeam;
+                if (!key || key === "#N/A") return;
+                if (!teamGroups[key]) teamGroups[key] = { training: 0, block: 0 };
+                teamGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
+                teamGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
+            });
+            const teams = Object.entries(teamGroups).map(([name, d]) => ({
+                name: name.length > 30 ? name.substring(0, 30) + '...' : name,
+                training: d.training.toFixed(1), block: d.block.toFixed(1),
+                utilization: (d.block > 0 ? (d.training / d.block) * 100 : 0).toFixed(2)
+            })).sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
+
+            // Coaches
+            const coachGroups = {};
+            filteredData.forEach(row => {
+                const key = isWeekly ? row.weeklyCoach : row.monthlyCoach;
+                if (!key || key === "#N/A") return;
+                if (!coachGroups[key]) coachGroups[key] = { training: 0, block: 0 };
+                coachGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
+                coachGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
+            });
+            const coaches = Object.entries(coachGroups).map(([name, d]) => ({
+                name: name.length > 25 ? name.substring(0, 25) + '...' : name,
+                training: d.training.toFixed(1), block: d.block.toFixed(1),
+                utilization: (d.block > 0 ? (d.training / d.block) * 100 : 0).toFixed(2)
+            })).sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
+
+            // Trend
+            const timeGroups = {};
+            filteredData.forEach(row => {
+                const key = isWeekly ? (row.weekStart ? formatDate(row.weekStart) : null) : row.monthlyYearMonth;
+                if (!key) return;
+                if (!timeGroups[key]) timeGroups[key] = { training: 0, block: 0 };
+                timeGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
+                timeGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
+            });
+            let trend = Object.entries(timeGroups).map(([time, d]) => ({
+                time, utilization: (d.block > 0 ? (d.training / d.block) * 100 : 0).toFixed(1)
+            })).sort((a, b) => a.time.localeCompare(b.time));
+
+            if (isWeekly && trend.length > 0) {
+                const latestWeek = filters.week !== 'All' ? filters.week : trend[trend.length - 1].time;
+                const idx = trend.findIndex(d => d.time === latestWeek);
+                if (idx >= 0) trend = trend.slice(Math.max(0, idx - 7), idx + 1);
+            }
+
+            return {
+                overall: { utilization: (totalBlock > 0 ? (totalTraining / totalBlock) * 100 : 0).toFixed(2), trainingHours: totalTraining.toFixed(1), blockHours: totalBlock.toFixed(1) },
+                subgroups: [subgroupOverall, ...subgroups], teams, coaches, trend
+            };
+        }
+
+        function getColor(utilization) {
+            const val = parseFloat(utilization);
+            return val >= 50 ? 'text-green-600' : val >= 1 ? 'text-yellow-600' : 'text-red-600';
+        }
+
+        function renderDashboard() {
+            const options = getFilterOptions();
+            const metrics = calculateMetrics();
+            const isWeekly = viewMode === 'weekly';
+
+            document.getElementById('app').innerHTML = `
+                <div class="w-full min-h-screen p-6">
+                    <div class="max-w-7xl mx-auto">
+                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <div class="flex justify-between items-center flex-wrap gap-4">
+                                <div>
+                                    <h1 class="text-3xl font-bold text-slate-800 mb-2">Training Block Utilization Dashboard</h1>
+                                    <p class="text-slate-600">Auto-loading from Google Drive</p>
+                                </div>
+                                <button onclick="loadData()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold">
+                                    🔄 Refresh Data
+                                </button>
+                            </div>
+                            <div class="mt-4 flex gap-2">
+                                <button onclick="setViewMode('weekly')" class="px-6 py-2 rounded-lg font-semibold ${viewMode === 'weekly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}">
+                                    Weekly View
+                                </button>
+                                <button onclick="setViewMode('monthly')" class="px-6 py-2 rounded-lg font-semibold ${viewMode === 'monthly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}">
+                                    Monthly View
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <h2 class="text-xl font-semibold mb-4">🔍 Filters</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Coach</label>
+                                    <select onchange="updateFilter('coach', this.value)" class="w-full p-2 border rounded-lg">
+                                        <option value="All">All Coaches</option>
+                                        ${options.coaches.map(c => `<option value="${c}" ${filters.coach === c ? 'selected' : ''}>${c}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Team</label>
+                                    <select onchange="updateFilter('team', this.value)" class="w-full p-2 border rounded-lg">
+                                        <option value="All">All Teams</option>
+                                        ${options.teams.map(t => `<option value="${t}" ${filters.team === t ? 'selected' : ''}>${t}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Subgroup</label>
+                                    <select onchange="updateFilter('subgroup', this.value)" class="w-full p-2 border rounded-lg">
+                                        <option value="All">All Subgroups</option>
+                                        ${options.subgroups.map(s => `<option value="${s}" ${filters.subgroup === s ? 'selected' : ''}>${s}</option>`).join('')}
+                                    </select>
+                                </div>
+                                ${isWeekly ? `
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Week</label>
+                                    <select onchange="updateFilter('week', this.value)" class="w-full p-2 border rounded-lg">
+                                        <option value="All">All Weeks</option>
+                                        ${options.weeks.map(w => `<option value="${w}" ${filters.week === w ? 'selected' : ''}>${w}</option>`).join('')}
+                                    </select>
+                                </div>
+                                ` : `
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Month</label>
+                                    <select onchange="updateFilter('month', this.value)" class="w-full p-2 border rounded-lg">
+                                        <option value="All">All Months</option>
+                                        ${options.months.map(m => `<option value="${m}" ${filters.month === m ? 'selected' : ''}>${m}</option>`).join('')}
+                                    </select>
+                                </div>
+                                `}
+                            </div>
+                        </div>
+
+                        <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-6 mb-6 text-white">
+                            <h2 class="text-2xl font-bold mb-4">Overall ${isWeekly ? 'Weekly' : 'Monthly'} Utilization</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div><p class="text-indigo-100 text-sm mb-2">Total Training Hours</p><p class="text-3xl font-bold">${metrics.overall.trainingHours}</p></div>
+                                <div><p class="text-indigo-100 text-sm mb-2">Total Block Hours</p><p class="text-3xl font-bold">${metrics.overall.blockHours}</p></div>
+                                <div><p class="text-indigo-100 text-sm mb-2">Utilization Rate</p><p class="text-3xl font-bold">${metrics.overall.utilization}%</p></div>
+                            </div>
+                            <p class="mt-4 text-indigo-100 text-sm">(Training Hours ÷ Block Hours) × 100 ${isWeekly ? '| Columns G & H' : '| Columns T & U'}</p>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <h3 class="text-lg font-semibold mb-4">${isWeekly ? 'Weekly Utilization Trend (Last 8 Weeks)' : 'Monthly Utilization Trend'}</h3>
+                            <canvas id="trendChart" style="max-height: 300px;"></canvas>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-white rounded-lg shadow-lg p-6">
+                                <h3 class="text-lg font-semibold mb-4">Utilization by Subgroup</h3>
+                                <canvas id="subgroupChart"></canvas>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-lg p-6">
+                                <h3 class="text-lg font-semibold mb-4">Utilization by Team</h3>
+                                <canvas id="teamChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Utilization by Coach</h3>
+                            <canvas id="coachChart"></canvas>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="bg-white rounded-lg shadow-lg p-6">
+                                <h3 class="text-lg font-semibold mb-4">Subgroup Summary</h3>
+                                <div class="overflow-auto max-h-96">
+                                    <table class="w-full text-sm">
+                                        <thead class="sticky top-0 bg-slate-100">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left font-semibold">Subgroup</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Training</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Block</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Util %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${metrics.subgroups.map(row => `
+                                                <tr class="border-b hover:bg-slate-50 ${row.name === 'Overall' ? 'bg-blue-50 font-semibold' : ''}">
+                                                    <td class="px-3 py-2">${row.name}</td>
+                                                    <td class="px-3 py-2 text-right">${row.training}</td>
+                                                    <td class="px-3 py-2 text-right">${row.block}</td>
+                                                    <td class="px-3 py-2 text-right"><span class="font-semibold ${getColor(row.utilization)}">${row.utilization}%</span></td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-lg p-6">
+                                <h3 class="text-lg font-semibold mb-4">Team Summary</h3>
+                                <div class="overflow-auto max-h-96">
+                                    <table class="w-full text-sm">
+                                        <thead class="sticky top-0 bg-slate-100">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left font-semibold">Team</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Training</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Block</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Util %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${metrics.teams.map(row => `
+                                                <tr class="border-b hover:bg-slate-50">
+                                                    <td class="px-3 py-2">${row.name}</td>
+                                                    <td class="px-3 py-2 text-right">${row.training}</td>
+                                                    <td class="px-3 py-2 text-right">${row.block}</td>
+                                                    <td class="px-3 py-2 text-right"><span class="font-semibold ${getColor(row.utilization)}">${row.utilization}%</span></td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-lg p-6">
+                                <h3 class="text-lg font-semibold mb-4">Coach Summary</h3>
+                                <div class="overflow-auto max-h-96">
+                                    <table class="w-full text-sm">
+                                        <thead class="sticky top-0 bg-slate-100">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left font-semibold">Coach</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Training</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Block</th>
+                                                <th class="px-3 py-2 text-right font-semibold">Util %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${metrics.coaches.map(row => `
+                                                <tr class="border-b hover:bg-slate-50">
+                                                    <td class="px-3 py-2">${row.name}</td>
+                                                    <td class="px-3 py-2 text-right">${row.training}</td>
+                                                    <td class="px-3 py-2 text-right">${row.block}</td>
+                                                    <td class="px-3 py-2 text-right"><span class="font-semibold ${getColor(row.utilization)}">${row.utilization}%</span></td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            setTimeout(() => renderCharts(metrics), 100);
+        }
+
+        function renderCharts(metrics) {
+            Object.values(charts).forEach(chart => chart && chart.destroy());
+
+            const trendCtx = document.getElementById('trendChart');
+            if (trendCtx) {
+                charts.trend = new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: metrics.trend.map(d => d.time),
+                        datasets: [{ label: 'Utilization %', data: metrics.trend.map(d => d.utilization), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: true }
+                });
+            }
+
+            const subgroupCtx = document.getElementById('subgroupChart');
+            if (subgroupCtx) {
+                charts.subgroup = new Chart(subgroupCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: metrics.subgroups.map(s => s.name),
+                        datasets: [{ label: 'Utilization %', data: metrics.subgroups.map(s => s.utilization), backgroundColor: '#10b981' }]
+                    },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true }
+                });
+            }
+
+            const teamCtx = document.getElementById('teamChart');
+            if (teamCtx) {
+                charts.team = new Chart(teamCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: metrics.teams.map(t => t.name),
+                        datasets: [{ label: 'Utilization %', data: metrics.teams.map(t => t.utilization), backgroundColor: '#f59e0b' }]
+                    },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true }
+                });
+            }
+
+            const coachCtx = document.getElementById('coachChart');
+            if (coachCtx) {
+                charts.coach = new Chart(coachCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: metrics.coaches.map(c => c.name),
+                        datasets: [{ label: 'Utilization %', data: metrics.coaches.map(c => c.utilization), backgroundColor: '#8b5cf6' }]
+                    },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true }
+                });
+            }
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            filters.month = 'All';
+            filters.week = 'All';
+            applyFilters();
+        }
+
+        function updateFilter(key, value) {
+            filters[key] = value;
+            applyFilters();
+        }
+
+        loadData();
     </script>
 </body>
 </html>
