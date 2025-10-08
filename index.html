@@ -24,10 +24,12 @@
 
         function excelDateToJSDate(serial) {
             if (!serial || isNaN(serial)) return null;
-            const daysFromEpoch = serial - 1;
+            // Excel serial date: Jan 1, 1900 = 1
+            // Need to subtract 1 day to match Excel's Monday display
             const excelEpoch = new Date(1900, 0, 1);
+            const daysToAdd = serial - 2; // -2 to correct for Excel bug and timezone
             const result = new Date(excelEpoch);
-            result.setDate(result.getDate() + daysFromEpoch + 1);
+            result.setDate(result.getDate() + daysToAdd);
             return new Date(result.getFullYear(), result.getMonth(), result.getDate());
         }
 
@@ -372,7 +374,7 @@
                                 <div><p class="text-indigo-100 text-sm mb-2">Total Block Hours</p><p class="text-3xl font-bold">${metrics.overall.blockHours}</p></div>
                                 <div><p class="text-indigo-100 text-sm mb-2">Utilization Rate</p><p class="text-3xl font-bold">${metrics.overall.utilization}%</p></div>
                             </div>
-                            <p class="mt-4 text-indigo-100 text-sm">(Training ÷ Block) × 100 ${isWeekly ? '| Columns G & H' : '| Columns T & U'}</p>
+                            <p class="mt-4 text-indigo-100 text-sm">Formula: (Training Hours ÷ Block Hours) × 100</p>
                         </div>
 
                         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
