@@ -12,27 +12,22 @@
     <div id="app"></div>
     
     <script>
-        // GitHub repository configuration
         const GITHUB_USERNAME = 'agvanguard';
         const GITHUB_REPO = 'trainingblockutil-dashboard';
         const EXCEL_FILENAME = 'Training Block Report Raw Data.xlsx';
 
-        // State
         let rawData = [];
         let filteredData = [];
         let viewMode = 'weekly';
         let filters = { coach: 'All', team: 'All', subgroup: 'All', month: 'All', week: 'All' };
         let charts = { trend: null, subgroup: null, team: null, coach: null };
 
-        // Helper functions
         function excelDateToJSDate(serial) {
             if (!serial || isNaN(serial)) return null;
-            // Excel serial date: day 1 = Jan 1, 1900
-            // Need to add 1 day to match Excel's displayed Monday dates
             const daysFromEpoch = serial - 1;
             const excelEpoch = new Date(1900, 0, 1);
             const result = new Date(excelEpoch);
-            result.setDate(result.getDate() + daysFromEpoch + 1); // +1 to match Excel Monday dates
+            result.setDate(result.getDate() + daysFromEpoch + 1);
             return new Date(result.getFullYear(), result.getMonth(), result.getDate());
         }
 
@@ -43,12 +38,19 @@
             return `${y}-${m}-${d}`;
         }
 
+        function isErrorValue(val) {
+            if (!val) return false;
+            const str = String(val).trim();
+            return str === '#N/A' || str === '#VALUE!' || str === 'NA' || str === '#REF!' || 
+                   str === '#DIV/0!' || str === '#NUM!' || str === '#NAME?' || str === '#NULL!' ||
+                   str.startsWith('#');
+        }
+
         function getColor(utilization) {
             const val = parseFloat(utilization);
             return val >= 50 ? 'text-green-600' : val >= 1 ? 'text-yellow-600' : 'text-red-600';
         }
 
-        // Show upload screen with auto-load option
         function showUploadScreen() {
             const downloadUrl = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/main/${encodeURIComponent(EXCEL_FILENAME)}`;
             
@@ -66,40 +68,37 @@
                                class="block w-full bg-purple-600 text-white text-center px-6 py-4 rounded-lg hover:bg-purple-700 font-semibold text-lg">
                                 ⚡ Auto-Load Latest Data
                             </button>
-                            <p class="text-xs text-slate-600 mt-2 text-center">Automatically loads the latest file from GitHub</p>
+                            <p class="text-xs text-slate-600 mt-2 text-center">Loads the latest file from GitHub automatically</p>
                         </div>
 
                         <div class="text-center my-4 text-slate-400 font-semibold">OR</div>
 
-                        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6 mb-4">
-                            <h3 class="font-semibold text-blue-900 mb-3">📥 Manual Download & Upload</h3>
+                        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6">
+                            <h3 class="font-semibold text-blue-900 mb-3">📥 Manual Upload</h3>
                             <a href="${downloadUrl}" download="${EXCEL_FILENAME}"
                                class="block w-full bg-blue-600 text-white text-center px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold mb-3">
                                 ⬇️ Download Data File
                             </a>
                             <input type="file" accept=".xlsx,.xls" 
-                                   class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-600 file:text-white hover:file:bg-green-700 cursor-pointer"
+                                   class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-600 file:text-white hover:file:bg-green-700"
                                    onchange="handleFileUpload(event)">
                         </div>
 
                         <div class="mt-6 bg-slate-50 border border-slate-200 rounded-lg p-4">
-                            <p class="text-xs text-slate-600">
-                                <strong>🔒 Privacy:</strong> Data stays in your browser only. Nothing is sent to any server.
-                            </p>
+                            <p class="text-xs text-slate-600"><strong>🔒 Privacy:</strong> Data stays in your browser only.</p>
                         </div>
                     </div>
                 </div>
             `;
         }
 
-        // Auto-load file from GitHub
         async function autoLoadFromGitHub() {
             document.getElementById('app').innerHTML = `
                 <div class="w-full min-h-screen flex items-center justify-center">
                     <div class="text-center">
                         <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mb-4"></div>
                         <p class="text-2xl font-semibold text-slate-800">Auto-Loading Latest Data...</p>
-                        <p class="text-sm text-slate-600 mt-2">Fetching from GitHub repository</p>
+                        <p class="text-sm text-slate-600 mt-2">Fetching from GitHub</p>
                     </div>
                 </div>
             `;
@@ -107,18 +106,14 @@
             try {
                 const fileUrl = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/main/${encodeURIComponent(EXCEL_FILENAME)}`;
                 const response = await fetch(fileUrl);
-                
-                if (!response.ok) throw new Error('File not found on GitHub. Please upload the Excel file to your repository first.');
-                
+                if (!response.ok) throw new Error('File not found. Please upload the Excel file to GitHub first.');
                 const arrayBuffer = await response.arrayBuffer();
                 await processExcelFile(arrayBuffer);
-                
             } catch (error) {
                 showError(error.message);
             }
         }
 
-        // Handle manual file upload
         async function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -141,20 +136,17 @@
             }
         }
 
-        // Process Excel file
         async function processExcelFile(arrayBuffer) {
             try {
                 const workbook = XLSX.read(arrayBuffer);
                 const sheetName = workbook.SheetNames.includes("Raw Data") ? "Raw Data" : workbook.SheetNames[0];
                 const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
-                // Helper to check if value is an error
-                const isErrorValue = (val) => {
-                    if (!val) return false;
-                    const str = String(val).trim();
-                    return str === '#N/A' || str === '#VALUE!' || str === 'NA' || str === '#REF!' || 
-                           str === '#DIV/0!' || str === '#NUM!' || str === '#NAME?' || str === '#NULL!' ||
-                           str.startsWith('#');
+                const cleanValue = (val) => (val && !isErrorValue(val)) ? val : "";
+                const cleanNumber = (val) => {
+                    if (!val || isErrorValue(val)) return 0;
+                    const num = parseFloat(val);
+                    return isNaN(num) ? 0 : num;
                 };
 
                 rawData = data.map(row => {
@@ -165,14 +157,6 @@
                         else if (weekStartValue instanceof Date) weekStartDate = weekStartValue;
                         else if (typeof weekStartValue === 'string') weekStartDate = new Date(weekStartValue);
                     }
-                    
-                    // Clean helper function
-                    const cleanValue = (val) => (val && !isErrorValue(val)) ? val : "";
-                    const cleanNumber = (val) => {
-                        if (!val || isErrorValue(val)) return 0;
-                        const num = parseFloat(val);
-                        return isNaN(num) ? 0 : num;
-                    };
                     
                     return {
                         weeklyYearMonth: cleanValue(row["Year - Month"]),
@@ -194,7 +178,7 @@
                 filteredData = [...rawData];
                 renderDashboard();
             } catch (error) {
-                throw new Error('Error processing Excel file: ' + error.message);
+                throw new Error('Error processing file: ' + error.message);
             }
         }
 
@@ -228,18 +212,21 @@
 
         function getFilterOptions() {
             const isWeekly = viewMode === 'weekly';
+            const isValid = (val) => val && !isErrorValue(val);
+            
             return {
-                coaches: [...new Set(rawData.map(d => isWeekly ? d.weeklyCoach : d.monthlyCoach).filter(c => c && c !== "#N/A"))].sort(),
-                teams: [...new Set(rawData.map(d => isWeekly ? d.weeklyTeam : d.monthlyTeam).filter(t => t && t !== "#N/A"))].sort(),
-                subgroups: [...new Set(rawData.map(d => isWeekly ? d.weeklySubgroup : d.monthlySubgroup).filter(s => s && s !== "#N/A"))].sort(),
+                coaches: [...new Set(rawData.map(d => isWeekly ? d.weeklyCoach : d.monthlyCoach).filter(isValid))].sort(),
+                teams: [...new Set(rawData.map(d => isWeekly ? d.weeklyTeam : d.monthlyTeam).filter(isValid))].sort(),
+                subgroups: [...new Set(rawData.map(d => isWeekly ? d.weeklySubgroup : d.monthlySubgroup).filter(isValid))].sort(),
                 weeks: [...new Set(rawData.filter(d => d.weekStart).map(d => formatDate(d.weekStart)))].sort(),
-                months: [...new Set(rawData.map(d => isWeekly ? d.weeklyYearMonth : d.monthlyYearMonth).filter(m => m && m !== "#N/A"))].sort()
+                months: [...new Set(rawData.map(d => isWeekly ? d.weeklyYearMonth : d.monthlyYearMonth).filter(isValid))].sort()
             };
         }
 
         function calculateMetrics() {
             if (filteredData.length === 0) return { overall: { utilization: 0, trainingHours: 0, blockHours: 0 }, subgroups: [], teams: [], coaches: [], trend: [] };
             
+            const isValid = (val) => val && !isErrorValue(val);
             const isWeekly = viewMode === 'weekly';
             const totalTraining = filteredData.reduce((sum, d) => sum + (isWeekly ? d.weeklyTrainingHours : d.monthlyTrainingHours), 0);
             const totalBlock = filteredData.reduce((sum, d) => sum + (isWeekly ? d.weeklyBlockHours : d.monthlyBlockHours), 0);
@@ -247,7 +234,7 @@
             const subgroupGroups = {};
             filteredData.forEach(row => {
                 const key = isWeekly ? row.weeklySubgroup : row.monthlySubgroup;
-                if (!key || key === "#N/A") return;
+                if (!isValid(key)) return;
                 if (!subgroupGroups[key]) subgroupGroups[key] = { training: 0, block: 0 };
                 subgroupGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
                 subgroupGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
@@ -267,7 +254,7 @@
             const teamGroups = {};
             filteredData.forEach(row => {
                 const key = isWeekly ? row.weeklyTeam : row.monthlyTeam;
-                if (!key || key === "#N/A") return;
+                if (!isValid(key)) return;
                 if (!teamGroups[key]) teamGroups[key] = { training: 0, block: 0 };
                 teamGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
                 teamGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
@@ -281,7 +268,7 @@
             const coachGroups = {};
             filteredData.forEach(row => {
                 const key = isWeekly ? row.weeklyCoach : row.monthlyCoach;
-                if (!key || key === "#N/A") return;
+                if (!isValid(key)) return;
                 if (!coachGroups[key]) coachGroups[key] = { training: 0, block: 0 };
                 coachGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
                 coachGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
@@ -295,7 +282,7 @@
             const timeGroups = {};
             filteredData.forEach(row => {
                 const key = isWeekly ? (row.weekStart ? formatDate(row.weekStart) : null) : row.monthlyYearMonth;
-                if (!key) return;
+                if (!key || !isValid(key)) return;
                 if (!timeGroups[key]) timeGroups[key] = { training: 0, block: 0 };
                 timeGroups[key].training += isWeekly ? row.weeklyTrainingHours : row.monthlyTrainingHours;
                 timeGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
@@ -331,12 +318,8 @@
                                     <p class="text-slate-600">Viewing ${rawData.length} records</p>
                                 </div>
                                 <div class="flex gap-2">
-                                    <button onclick="autoLoadFromGitHub()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-semibold">
-                                        ⚡ Reload Data
-                                    </button>
-                                    <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold">
-                                        📁 Upload File
-                                    </button>
+                                    <button onclick="autoLoadFromGitHub()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-semibold">⚡ Reload</button>
+                                    <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold">📁 Upload</button>
                                 </div>
                             </div>
                             <div class="mt-4 flex gap-2">
@@ -348,44 +331,37 @@
                         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
                             <h2 class="text-xl font-semibold mb-4">🔍 Filters</h2>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">Coach</label>
+                                <div><label class="block text-sm font-medium mb-2">Coach</label>
                                     <select onchange="updateFilter('coach', this.value)" class="w-full p-2 border rounded-lg">
                                         <option value="All">All Coaches</option>
                                         ${options.coaches.map(c => `<option value="${c}" ${filters.coach === c ? 'selected' : ''}>${c}</option>`).join('')}
                                     </select>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">Team</label>
+                                <div><label class="block text-sm font-medium mb-2">Team</label>
                                     <select onchange="updateFilter('team', this.value)" class="w-full p-2 border rounded-lg">
                                         <option value="All">All Teams</option>
                                         ${options.teams.map(t => `<option value="${t}" ${filters.team === t ? 'selected' : ''}>${t}</option>`).join('')}
                                     </select>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">Subgroup</label>
+                                <div><label class="block text-sm font-medium mb-2">Subgroup</label>
                                     <select onchange="updateFilter('subgroup', this.value)" class="w-full p-2 border rounded-lg">
                                         <option value="All">All Subgroups</option>
                                         ${options.subgroups.map(s => `<option value="${s}" ${filters.subgroup === s ? 'selected' : ''}>${s}</option>`).join('')}
                                     </select>
                                 </div>
                                 ${isWeekly ? `
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">Week</label>
+                                <div><label class="block text-sm font-medium mb-2">Week</label>
                                     <select onchange="updateFilter('week', this.value)" class="w-full p-2 border rounded-lg">
                                         <option value="All">All Weeks</option>
                                         ${options.weeks.map(w => `<option value="${w}" ${filters.week === w ? 'selected' : ''}>${w}</option>`).join('')}
                                     </select>
-                                </div>
-                                ` : `
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">Month</label>
+                                </div>` : `
+                                <div><label class="block text-sm font-medium mb-2">Month</label>
                                     <select onchange="updateFilter('month', this.value)" class="w-full p-2 border rounded-lg">
                                         <option value="All">All Months</option>
                                         ${options.months.map(m => `<option value="${m}" ${filters.month === m ? 'selected' : ''}>${m}</option>`).join('')}
                                     </select>
-                                </div>
-                                `}
+                                </div>`}
                             </div>
                         </div>
 
@@ -396,27 +372,21 @@
                                 <div><p class="text-indigo-100 text-sm mb-2">Total Block Hours</p><p class="text-3xl font-bold">${metrics.overall.blockHours}</p></div>
                                 <div><p class="text-indigo-100 text-sm mb-2">Utilization Rate</p><p class="text-3xl font-bold">${metrics.overall.utilization}%</p></div>
                             </div>
-                            <p class="mt-4 text-indigo-100 text-sm">(Training Hours ÷ Block Hours) × 100 ${isWeekly ? '| Columns G & H' : '| Columns T & U'}</p>
+                            <p class="mt-4 text-indigo-100 text-sm">(Training ÷ Block) × 100 ${isWeekly ? '| Columns G & H' : '| Columns T & U'}</p>
                         </div>
 
                         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <h3 class="text-lg font-semibold mb-4">${isWeekly ? 'Weekly Utilization Trend (Last 8 Weeks)' : 'Monthly Utilization Trend'}</h3>
+                            <h3 class="text-lg font-semibold mb-4">${isWeekly ? 'Weekly Trend (Last 8 Weeks)' : 'Monthly Trend'}</h3>
                             <canvas id="trendChart" style="max-height: 300px;"></canvas>
                         </div>
 
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                            <div class="bg-white rounded-lg shadow-lg p-6">
-                                <h3 class="text-lg font-semibold mb-4">Utilization by Subgroup</h3>
-                                <canvas id="subgroupChart"></canvas>
-                            </div>
-                            <div class="bg-white rounded-lg shadow-lg p-6">
-                                <h3 class="text-lg font-semibold mb-4">Utilization by Team</h3>
-                                <canvas id="teamChart"></canvas>
-                            </div>
+                            <div class="bg-white rounded-lg shadow-lg p-6"><h3 class="text-lg font-semibold mb-4">By Subgroup</h3><canvas id="subgroupChart"></canvas></div>
+                            <div class="bg-white rounded-lg shadow-lg p-6"><h3 class="text-lg font-semibold mb-4">By Team</h3><canvas id="teamChart"></canvas></div>
                         </div>
 
                         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <h3 class="text-lg font-semibold mb-4">Utilization by Coach</h3>
+                            <h3 class="text-lg font-semibold mb-4">By Coach</h3>
                             <canvas id="coachChart"></canvas>
                         </div>
 
@@ -426,12 +396,7 @@
                                 <div class="overflow-auto max-h-96">
                                     <table class="w-full text-sm">
                                         <thead class="sticky top-0 bg-slate-100">
-                                            <tr>
-                                                <th class="px-3 py-2 text-left font-semibold">Subgroup</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Training</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Block</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Util %</th>
-                                            </tr>
+                                            <tr><th class="px-3 py-2 text-left font-semibold">Subgroup</th><th class="px-3 py-2 text-right font-semibold">Training</th><th class="px-3 py-2 text-right font-semibold">Block</th><th class="px-3 py-2 text-right font-semibold">Util %</th></tr>
                                         </thead>
                                         <tbody>
                                             ${metrics.subgroups.map(row => `
@@ -451,12 +416,7 @@
                                 <div class="overflow-auto max-h-96">
                                     <table class="w-full text-sm">
                                         <thead class="sticky top-0 bg-slate-100">
-                                            <tr>
-                                                <th class="px-3 py-2 text-left font-semibold">Team</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Training</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Block</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Util %</th>
-                                            </tr>
+                                            <tr><th class="px-3 py-2 text-left font-semibold">Team</th><th class="px-3 py-2 text-right font-semibold">Training</th><th class="px-3 py-2 text-right font-semibold">Block</th><th class="px-3 py-2 text-right font-semibold">Util %</th></tr>
                                         </thead>
                                         <tbody>
                                             ${metrics.teams.map(row => `
@@ -476,12 +436,7 @@
                                 <div class="overflow-auto max-h-96">
                                     <table class="w-full text-sm">
                                         <thead class="sticky top-0 bg-slate-100">
-                                            <tr>
-                                                <th class="px-3 py-2 text-left font-semibold">Coach</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Training</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Block</th>
-                                                <th class="px-3 py-2 text-right font-semibold">Util %</th>
-                                            </tr>
+                                            <tr><th class="px-3 py-2 text-left font-semibold">Coach</th><th class="px-3 py-2 text-right font-semibold">Training</th><th class="px-3 py-2 text-right font-semibold">Block</th><th class="px-3 py-2 text-right font-semibold">Util %</th></tr>
                                         </thead>
                                         <tbody>
                                             ${metrics.coaches.map(row => `
@@ -507,50 +462,34 @@
         function renderCharts(metrics) {
             Object.values(charts).forEach(chart => chart && chart.destroy());
 
-            const trendCtx = document.getElementById('trendChart');
-            if (trendCtx) {
-                charts.trend = new Chart(trendCtx, {
+            if (document.getElementById('trendChart')) {
+                charts.trend = new Chart(document.getElementById('trendChart'), {
                     type: 'line',
-                    data: {
-                        labels: metrics.trend.map(d => d.time),
-                        datasets: [{ label: 'Utilization %', data: metrics.trend.map(d => d.utilization), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3 }]
-                    },
+                    data: { labels: metrics.trend.map(d => d.time), datasets: [{ label: 'Utilization %', data: metrics.trend.map(d => d.utilization), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3 }] },
                     options: { responsive: true, maintainAspectRatio: true }
                 });
             }
 
-            const subgroupCtx = document.getElementById('subgroupChart');
-            if (subgroupCtx) {
-                charts.subgroup = new Chart(subgroupCtx, {
+            if (document.getElementById('subgroupChart')) {
+                charts.subgroup = new Chart(document.getElementById('subgroupChart'), {
                     type: 'bar',
-                    data: {
-                        labels: metrics.subgroups.map(s => s.name),
-                        datasets: [{ label: 'Utilization %', data: metrics.subgroups.map(s => s.utilization), backgroundColor: '#10b981' }]
-                    },
+                    data: { labels: metrics.subgroups.map(s => s.name), datasets: [{ label: 'Utilization %', data: metrics.subgroups.map(s => s.utilization), backgroundColor: '#10b981' }] },
                     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true }
                 });
             }
 
-            const teamCtx = document.getElementById('teamChart');
-            if (teamCtx) {
-                charts.team = new Chart(teamCtx, {
+            if (document.getElementById('teamChart')) {
+                charts.team = new Chart(document.getElementById('teamChart'), {
                     type: 'bar',
-                    data: {
-                        labels: metrics.teams.map(t => t.name),
-                        datasets: [{ label: 'Utilization %', data: metrics.teams.map(t => t.utilization), backgroundColor: '#f59e0b' }]
-                    },
+                    data: { labels: metrics.teams.map(t => t.name), datasets: [{ label: 'Utilization %', data: metrics.teams.map(t => t.utilization), backgroundColor: '#f59e0b' }] },
                     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true }
                 });
             }
 
-            const coachCtx = document.getElementById('coachChart');
-            if (coachCtx) {
-                charts.coach = new Chart(coachCtx, {
+            if (document.getElementById('coachChart')) {
+                charts.coach = new Chart(document.getElementById('coachChart'), {
                     type: 'bar',
-                    data: {
-                        labels: metrics.coaches.map(c => c.name),
-                        datasets: [{ label: 'Utilization %', data: metrics.coaches.map(c => c.utilization), backgroundColor: '#8b5cf6' }]
-                    },
+                    data: { labels: metrics.coaches.map(c => c.name), datasets: [{ label: 'Utilization %', data: metrics.coaches.map(c => c.utilization), backgroundColor: '#8b5cf6' }] },
                     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true }
                 });
             }
@@ -568,7 +507,6 @@
             applyFilters();
         }
 
-        // Show upload screen on page load
         showUploadScreen();
     </script>
 </body>
