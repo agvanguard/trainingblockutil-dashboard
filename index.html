@@ -12,8 +12,10 @@
     <div id="app"></div>
     
     <script>
-        // Your Google Drive File ID (from your Google Sheets link)
-        const GOOGLE_DRIVE_FILE_ID = '1_MYPX5tSiUQmt4tbqsQxeXerbjGeErbVGwtK0ndN2X4';
+        // Your GitHub repository info
+        const GITHUB_USERNAME = 'agvanguard';
+        const GITHUB_REPO = 'trainingblockutil-dashboard';
+        const EXCEL_FILENAME = 'Training Block Report Raw Data.xlsx';
 
         let rawData = [];
         let filteredData = [];
@@ -97,6 +99,14 @@
 
             try {
                 const arrayBuffer = await file.arrayBuffer();
+                await processExcelFile(arrayBuffer);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function processExcelFile(arrayBuffer) {
+            try {
                 const workbook = XLSX.read(arrayBuffer);
                 const sheetName = workbook.SheetNames.includes("Raw Data") ? "Raw Data" : workbook.SheetNames[0];
                 const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
@@ -130,19 +140,23 @@
                 filteredData = [...rawData];
                 renderDashboard();
             } catch (error) {
-                document.getElementById('app').innerHTML = `
-                    <div class="w-full min-h-screen flex items-center justify-center p-6">
-                        <div class="max-w-2xl bg-white rounded-lg shadow-lg p-8 text-center">
-                            <div class="text-red-600 mb-4 text-6xl">✕</div>
-                            <h2 class="text-2xl font-bold mb-4">Error Processing File</h2>
-                            <p class="text-slate-600 mb-6">${error.message}</p>
-                            <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold">
-                                Try Again
-                            </button>
-                        </div>
-                    </div>
-                `;
+                throw error;
             }
+        }
+
+        function showError(message) {
+            document.getElementById('app').innerHTML = `
+                <div class="w-full min-h-screen flex items-center justify-center p-6">
+                    <div class="max-w-2xl bg-white rounded-lg shadow-lg p-8 text-center">
+                        <div class="text-red-600 mb-4 text-6xl">✕</div>
+                        <h2 class="text-2xl font-bold mb-4">Error Processing File</h2>
+                        <p class="text-slate-600 mb-6">${message}</p>
+                        <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            `;
         }
 
         function applyFilters() {
@@ -265,11 +279,16 @@
                             <div class="flex justify-between items-center flex-wrap gap-4">
                                 <div>
                                     <h1 class="text-3xl font-bold text-slate-800 mb-2">Training Block Utilization Dashboard</h1>
-                                    <p class="text-slate-600">Viewing data from uploaded file</p>
+                                    <p class="text-slate-600">Viewing ${rawData.length} records</p>
                                 </div>
-                                <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold">
-                                    📁 Upload New File
-                                </button>
+                                <div class="flex gap-2">
+                                    <button onclick="autoLoadFromGitHub()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-semibold">
+                                        ⚡ Reload Latest Data
+                                    </button>
+                                    <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold">
+                                        📁 Upload New File
+                                    </button>
+                                </div>
                             </div>
                             <div class="mt-4 flex gap-2">
                                 <button onclick="setViewMode('weekly')" class="px-6 py-2 rounded-lg font-semibold ${viewMode === 'weekly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}">
