@@ -27,9 +27,12 @@
         // Helper functions
         function excelDateToJSDate(serial) {
             if (!serial || isNaN(serial)) return null;
+            // Excel serial date: day 1 = Jan 1, 1900
+            // Need to add 1 day to match Excel's displayed Monday dates
+            const daysFromEpoch = serial - 1;
             const excelEpoch = new Date(1900, 0, 1);
             const result = new Date(excelEpoch);
-            result.setDate(result.getDate() + serial);
+            result.setDate(result.getDate() + daysFromEpoch + 1); // +1 to match Excel Monday dates
             return new Date(result.getFullYear(), result.getMonth(), result.getDate());
         }
 
@@ -145,28 +148,46 @@
                 const sheetName = workbook.SheetNames.includes("Raw Data") ? "Raw Data" : workbook.SheetNames[0];
                 const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
+                // Helper to check if value is an error
+                const isErrorValue = (val) => {
+                    if (!val) return false;
+                    const str = String(val).trim();
+                    return str === '#N/A' || str === '#VALUE!' || str === 'NA' || str === '#REF!' || 
+                           str === '#DIV/0!' || str === '#NUM!' || str === '#NAME?' || str === '#NULL!' ||
+                           str.startsWith('#');
+                };
+
                 rawData = data.map(row => {
                     let weekStartDate = null;
                     const weekStartValue = row["Week Start"];
-                    if (weekStartValue) {
+                    if (weekStartValue && !isErrorValue(weekStartValue)) {
                         if (typeof weekStartValue === 'number') weekStartDate = excelDateToJSDate(weekStartValue);
                         else if (weekStartValue instanceof Date) weekStartDate = weekStartValue;
                         else if (typeof weekStartValue === 'string') weekStartDate = new Date(weekStartValue);
                     }
+                    
+                    // Clean helper function
+                    const cleanValue = (val) => (val && !isErrorValue(val)) ? val : "";
+                    const cleanNumber = (val) => {
+                        if (!val || isErrorValue(val)) return 0;
+                        const num = parseFloat(val);
+                        return isNaN(num) ? 0 : num;
+                    };
+                    
                     return {
-                        weeklyYearMonth: row["Year - Month"] || "",
+                        weeklyYearMonth: cleanValue(row["Year - Month"]),
                         weekStart: weekStartDate,
-                        weeklySubgroup: row.Subgroup || "",
-                        weeklyCoach: row.Coach || "",
-                        weeklyTeam: row.Team || "",
-                        weeklyTrainingHours: parseFloat(row["Training Total Hours"]) || 0,
-                        weeklyBlockHours: parseFloat(row["Total Training Block Hours"]) || 0,
-                        monthlyYearMonth: row["Year - Month_1"] || "",
-                        monthlySubgroup: row["Subgroup_1"] || "",
-                        monthlyTrainingHours: parseFloat(row["Training Total Hours_1"]) || 0,
-                        monthlyBlockHours: parseFloat(row["Total Training Block Hours_1"]) || 0,
-                        monthlyCoach: row["Coach_1"] || row.Coach || "",
-                        monthlyTeam: row["Team_1"] || row.Team || ""
+                        weeklySubgroup: cleanValue(row.Subgroup),
+                        weeklyCoach: cleanValue(row.Coach),
+                        weeklyTeam: cleanValue(row.Team),
+                        weeklyTrainingHours: cleanNumber(row["Training Total Hours"]),
+                        weeklyBlockHours: cleanNumber(row["Total Training Block Hours"]),
+                        monthlyYearMonth: cleanValue(row["Year - Month_1"]),
+                        monthlySubgroup: cleanValue(row["Subgroup_1"]),
+                        monthlyTrainingHours: cleanNumber(row["Training Total Hours_1"]),
+                        monthlyBlockHours: cleanNumber(row["Total Training Block Hours_1"]),
+                        monthlyCoach: cleanValue(row["Coach_1"]) || cleanValue(row.Coach),
+                        monthlyTeam: cleanValue(row["Team_1"]) || cleanValue(row.Team)
                     };
                 }).filter(row => row.weekStart && !isNaN(row.weekStart));
 
