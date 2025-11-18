@@ -209,6 +209,9 @@
                         else if (typeof weekStartValue === 'string') weekStartDate = new Date(weekStartValue);
                     }
                     
+                    // For monthly data, use the "Year - Month" column (Column O in your sheet)
+                    const monthlyYearMonth = cleanValue(row["Year - Month"]);
+                    
                     return {
                         weeklyYearMonth: cleanValue(row["Year - Month"]),
                         weekStart: weekStartDate,
@@ -217,12 +220,12 @@
                         weeklyTeam: cleanValue(row.Team),
                         weeklyTrainingHours: cleanNumber(row["Training Total Hours"]),
                         weeklyBlockHours: cleanNumber(row["Total Training Block Hours"]),
-                        monthlyYearMonth: cleanValue(row["Year - Month_1"]),
-                        monthlySubgroup: cleanValue(row["Subgroup_1"]),
-                        monthlyTrainingHours: cleanNumber(row["Training Total Hours_1"]),
-                        monthlyBlockHours: cleanNumber(row["Total Training Block Hours_1"]),
-                        monthlyCoach: cleanValue(row["Coach_1"]) || cleanValue(row.Coach),
-                        monthlyTeam: cleanValue(row["Team_1"]) || cleanValue(row.Team)
+                        monthlyYearMonth: monthlyYearMonth,
+                        monthlySubgroup: cleanValue(row.Subgroup),
+                        monthlyTrainingHours: cleanNumber(row["Training Total Hours"]),
+                        monthlyBlockHours: cleanNumber(row["Total Training Block Hours"]),
+                        monthlyCoach: cleanValue(row.Coach),
+                        monthlyTeam: cleanValue(row.Team)
                     };
                 }).filter(row => row.weekStart && !isNaN(row.weekStart));
 
