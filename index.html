@@ -432,7 +432,7 @@
                         <h2 style="color: white;">Overall ${isWeekly ? 'Weekly' : 'Monthly'} Utilization</h2>
                         <div class="grid grid-3">
                             <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Total Training Hours</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.trainingHours}</p></div>
-                            <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Total Block Hours</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.blockHours}</p></div>
+                            <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Total Training Block Hours</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.blockHours}</p></div>
                             <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Utilization Rate</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.utilization || '-'}%</p></div>
                         </div>
                     </div>
@@ -457,7 +457,7 @@
                             <h3>Subgroup Summary</h3>
                             <div class="overflow-auto">
                                 <table>
-                                    <thead><tr><th>Subgroup</th><th class="text-right">Training</th><th class="text-right">Block</th><th class="text-right">Util %</th></tr></thead>
+                                    <thead><tr><th>Subgroup</th><th class="text-right">Training</th><th class="text-right">Training Block</th><th class="text-right">Util %</th></tr></thead>
                                     <tbody>
                                         ${metrics.subgroups.map(row => `
                                             <tr class="${row.name === 'Overall' ? 'highlight-row' : ''}">
@@ -475,7 +475,7 @@
                             <h3>Team Summary</h3>
                             <div class="overflow-auto">
                                 <table>
-                                    <thead><tr><th>Team</th><th class="text-right">Training</th><th class="text-right">Block</th><th class="text-right">Util %</th></tr></thead>
+                                    <thead><tr><th>Team</th><th class="text-right">Training</th><th class="text-right">Training Block</th><th class="text-right">Util %</th></tr></thead>
                                     <tbody>
                                         ${metrics.teams.map(row => `
                                             <tr>
@@ -493,7 +493,7 @@
                             <h3>Coach Summary</h3>
                             <div class="overflow-auto">
                                 <table>
-                                    <thead><tr><th>Coach</th><th class="text-right">Training</th><th class="text-right">Block</th><th class="text-right">Util %</th></tr></thead>
+                                    <thead><tr><th>Coach</th><th class="text-right">Training</th><th class="text-right">Training Block</th><th class="text-right">Util %</th></tr></thead>
                                     <tbody>
                                         ${metrics.coaches.map(row => `
                                             <tr>
