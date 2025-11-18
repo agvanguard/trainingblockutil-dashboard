@@ -4,21 +4,60 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Training Block Utilization Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {}
-            }
-        }
-    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(to bottom right, #f8fafc, #f1f5f9); min-height: 100vh; }
+        .container { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
+        .card { background: white; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; } .btn-primary:hover { background: #2563eb; }
+        .btn-purple { background: #9333ea; color: white; } .btn-purple:hover { background: #7e22ce; }
+        .btn-blue { background: #3b82f6; color: white; } .btn-blue:hover { background: #2563eb; }
+        .btn-secondary { background: #e2e8f0; color: #334155; } .btn-secondary:hover { background: #cbd5e1; }
+        .grid { display: grid; gap: 1rem; }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .flex { display: flex; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .flex-gap { gap: 0.5rem; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        h1 { font-size: 2rem; font-weight: bold; color: #1e293b; margin-bottom: 0.5rem; }
+        h2 { font-size: 1.5rem; font-weight: 600; color: #1e293b; margin-bottom: 1rem; }
+        h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-bottom: 1rem; }
+        select, input[type="file"] { width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; }
+        label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; }
+        table { width: 100%; font-size: 0.875rem; }
+        thead { background: #f1f5f9; position: sticky; top: 0; }
+        th { padding: 0.75rem; font-weight: 600; text-align: left; }
+        th.text-right { text-align: right; }
+        td { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; }
+        tr:hover { background: #f8fafc; }
+        .overflow-auto { overflow: auto; max-height: 24rem; }
+        .spinner { border: 4px solid #f3f4f6; border-top: 4px solid #9333ea; border-radius: 50%; width: 4rem; height: 4rem; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .header-purple { background: linear-gradient(to bottom right, #6366f1, #8b5cf6); color: white; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1.5rem; }
+        .text-green { color: #16a34a; font-weight: 600; }
+        .text-yellow { color: #ca8a04; font-weight: 600; }
+        .text-red { color: #dc2626; font-weight: 600; }
+        .text-gray { color: #94a3b8; }
+        .border-box { border: 2px solid; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; }
+        .border-purple { border-color: #e9d5ff; background: linear-gradient(to right, #faf5ff, #fce7f3); }
+        .border-blue { border-color: #bfdbfe; background: linear-gradient(to right, #eff6ff, #e0e7ff); }
+        .text-small { font-size: 0.75rem; color: #64748b; }
+        .mb-3 { margin-bottom: 0.75rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mt-4 { margin-top: 1rem; }
+        .highlight-row { background: #dbeafe; font-weight: 600; }
+        .upload-input { display: block; width: 100%; padding: 0.5rem; border-radius: 0.5rem; background: #16a34a; color: white; cursor: pointer; }
+        @media (max-width: 768px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
     </style>
 </head>
-<body class="bg-gradient-to-br from-slate-50 to-slate-100">
+<body>
     <div id="app"></div>
     
     <script>
@@ -57,12 +96,11 @@
         }
 
         function getColor(utilization) {
-            if (utilization === '' || utilization === null || utilization === undefined) return 'text-slate-400';
+            if (utilization === '' || utilization === null || utilization === undefined) return 'text-gray';
             const val = parseFloat(utilization);
-            return val >= 50 ? 'text-green-600' : val >= 1 ? 'text-yellow-600' : 'text-red-600';
+            return val >= 50 ? 'text-green' : val >= 1 ? 'text-yellow' : 'text-red';
         }
 
-        // Calculate utilization, return blank if block hours is 0
         function calcUtilization(training, block) {
             if (!block || block === 0) return '';
             return ((training / block) * 100).toFixed(2);
@@ -72,37 +110,33 @@
             const downloadUrl = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/main/${encodeURIComponent(EXCEL_FILENAME)}`;
             
             document.getElementById('app').innerHTML = `
-                <div class="w-full min-h-screen flex items-center justify-center p-6">
-                    <div class="bg-white rounded-lg shadow-2xl p-12 max-w-2xl w-full">
-                        <div class="text-center mb-8">
-                            <h1 class="text-4xl font-bold text-slate-800 mb-4">📊 Training Block Dashboard</h1>
-                            <p class="text-slate-600">Choose how to load your data</p>
+                <div class="container">
+                    <div class="card" style="max-width: 800px; margin: 4rem auto;">
+                        <div class="text-center mb-4">
+                            <h1>📊 Training Block Dashboard</h1>
+                            <p>Choose how to load your data</p>
                         </div>
                         
-                        <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-6 mb-4">
-                            <h3 class="font-semibold text-purple-900 mb-3">🚀 Quick Load (Recommended)</h3>
-                            <button onclick="autoLoadFromGitHub()" 
-                               class="block w-full bg-purple-600 text-white text-center px-6 py-4 rounded-lg hover:bg-purple-700 font-semibold text-lg">
+                        <div class="border-box border-purple mb-3">
+                            <h3 class="mb-3">🚀 Quick Load (Recommended)</h3>
+                            <button onclick="autoLoadFromGitHub()" class="btn btn-purple" style="width: 100%; padding: 1rem; font-size: 1.125rem;">
                                 ⚡ Auto-Load Latest Data
                             </button>
-                            <p class="text-xs text-slate-600 mt-2 text-center">Loads the latest file from GitHub automatically</p>
+                            <p class="text-small mt-2 text-center">Loads the latest file from GitHub automatically</p>
                         </div>
 
-                        <div class="text-center my-4 text-slate-400 font-semibold">OR</div>
+                        <div class="text-center mb-3" style="color: #94a3b8; font-weight: 600;">OR</div>
 
-                        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6">
-                            <h3 class="font-semibold text-blue-900 mb-3">📥 Manual Upload</h3>
-                            <a href="${downloadUrl}" download="${EXCEL_FILENAME}"
-                               class="block w-full bg-blue-600 text-white text-center px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold mb-3">
+                        <div class="border-box border-blue">
+                            <h3 class="mb-3">📥 Manual Upload</h3>
+                            <a href="${downloadUrl}" download="${EXCEL_FILENAME}" class="btn btn-blue mb-3" style="display: block; text-align: center; text-decoration: none; padding: 0.75rem;">
                                 ⬇️ Download Data File
                             </a>
-                            <input type="file" accept=".xlsx,.xls" 
-                                   class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-600 file:text-white hover:file:bg-green-700"
-                                   onchange="handleFileUpload(event)">
+                            <input type="file" accept=".xlsx,.xls" class="upload-input" onchange="handleFileUpload(event)">
                         </div>
 
-                        <div class="mt-6 bg-slate-50 border border-slate-200 rounded-lg p-4">
-                            <p class="text-xs text-slate-600"><strong>🔒 Privacy:</strong> Data stays in your browser only.</p>
+                        <div class="mt-4" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem;">
+                            <p class="text-small"><strong>🔒 Privacy:</strong> Data stays in your browser only.</p>
                         </div>
                     </div>
                 </div>
@@ -111,11 +145,11 @@
 
         async function autoLoadFromGitHub() {
             document.getElementById('app').innerHTML = `
-                <div class="w-full min-h-screen flex items-center justify-center">
+                <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
                     <div class="text-center">
-                        <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mb-4"></div>
-                        <p class="text-2xl font-semibold text-slate-800">Auto-Loading Latest Data...</p>
-                        <p class="text-sm text-slate-600 mt-2">Fetching from GitHub</p>
+                        <div class="spinner mb-4"></div>
+                        <p style="font-size: 1.5rem; font-weight: 600; color: #1e293b;">Auto-Loading Latest Data...</p>
+                        <p class="text-small mt-2">Fetching from GitHub</p>
                     </div>
                 </div>
             `;
@@ -136,11 +170,11 @@
             if (!file) return;
 
             document.getElementById('app').innerHTML = `
-                <div class="w-full min-h-screen flex items-center justify-center">
+                <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
                     <div class="text-center">
-                        <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
-                        <p class="text-2xl font-semibold text-slate-800">Processing File...</p>
-                        <p class="text-sm text-slate-600 mt-2">${file.name}</p>
+                        <div class="spinner mb-4"></div>
+                        <p style="font-size: 1.5rem; font-weight: 600; color: #1e293b;">Processing File...</p>
+                        <p class="text-small mt-2">${file.name}</p>
                     </div>
                 </div>
             `;
@@ -201,14 +235,12 @@
 
         function showError(message) {
             document.getElementById('app').innerHTML = `
-                <div class="w-full min-h-screen flex items-center justify-center p-6">
-                    <div class="max-w-2xl bg-white rounded-lg shadow-lg p-8 text-center">
-                        <div class="text-red-600 mb-4 text-6xl">✕</div>
-                        <h2 class="text-2xl font-bold mb-4">Error</h2>
-                        <p class="text-slate-600 mb-6">${message}</p>
-                        <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold">
-                            Back
-                        </button>
+                <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem;">
+                    <div class="card text-center" style="max-width: 600px;">
+                        <div style="color: #dc2626; font-size: 4rem; margin-bottom: 1rem;">✕</div>
+                        <h2>Error</h2>
+                        <p style="color: #64748b; margin-bottom: 1.5rem;">${message}</p>
+                        <button onclick="showUploadScreen()" class="btn btn-primary">Back</button>
                     </div>
                 </div>
             `;
@@ -257,9 +289,7 @@
                 subgroupGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
             });
             const subgroups = Object.entries(subgroupGroups).map(([name, d]) => ({
-                name,
-                training: d.training.toFixed(1),
-                block: d.block.toFixed(1),
+                name, training: d.training.toFixed(1), block: d.block.toFixed(1),
                 utilization: calcUtilization(d.training, d.block)
             })).sort((a, b) => {
                 const aVal = a.utilization === '' ? -1 : parseFloat(a.utilization);
@@ -284,8 +314,7 @@
             });
             const teams = Object.entries(teamGroups).map(([name, d]) => ({
                 name: name.length > 30 ? name.substring(0, 30) + '...' : name,
-                training: d.training.toFixed(1),
-                block: d.block.toFixed(1),
+                training: d.training.toFixed(1), block: d.block.toFixed(1),
                 utilization: calcUtilization(d.training, d.block)
             })).sort((a, b) => {
                 const aVal = a.utilization === '' ? -1 : parseFloat(a.utilization);
@@ -303,8 +332,7 @@
             });
             const coaches = Object.entries(coachGroups).map(([name, d]) => ({
                 name: name.length > 25 ? name.substring(0, 25) + '...' : name,
-                training: d.training.toFixed(1),
-                block: d.block.toFixed(1),
+                training: d.training.toFixed(1), block: d.block.toFixed(1),
                 utilization: calcUtilization(d.training, d.block)
             })).sort((a, b) => {
                 const aVal = a.utilization === '' ? -1 : parseFloat(a.utilization);
@@ -321,8 +349,7 @@
                 timeGroups[key].block += isWeekly ? row.weeklyBlockHours : row.monthlyBlockHours;
             });
             let trend = Object.entries(timeGroups).map(([time, d]) => ({
-                time,
-                utilization: calcUtilization(d.training, d.block) || '0'
+                time, utilization: calcUtilization(d.training, d.block) || '0'
             })).sort((a, b) => a.time.localeCompare(b.time));
 
             if (isWeekly && trend.length > 0) {
@@ -332,15 +359,8 @@
             }
 
             return {
-                overall: {
-                    utilization: calcUtilization(totalTraining, totalBlock) || '0.00',
-                    trainingHours: totalTraining.toFixed(1),
-                    blockHours: totalBlock.toFixed(1)
-                },
-                subgroups: [subgroupOverall, ...subgroups],
-                teams,
-                coaches,
-                trend
+                overall: { utilization: calcUtilization(totalTraining, totalBlock) || '0.00', trainingHours: totalTraining.toFixed(1), blockHours: totalBlock.toFixed(1) },
+                subgroups: [subgroupOverall, ...subgroups], teams, coaches, trend
             };
         }
 
@@ -350,152 +370,138 @@
             const isWeekly = viewMode === 'weekly';
 
             document.getElementById('app').innerHTML = `
-                <div class="w-full min-h-screen p-6">
-                    <div class="max-w-7xl mx-auto">
-                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <div class="flex justify-between items-center flex-wrap gap-4">
-                                <div>
-                                    <h1 class="text-3xl font-bold text-slate-800 mb-2">Training Block Utilization Dashboard</h1>
-                                    <p class="text-slate-600">Viewing ${rawData.length} records</p>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button onclick="autoLoadFromGitHub()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-semibold">⚡ Reload</button>
-                                    <button onclick="showUploadScreen()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold">📁 Upload</button>
-                                </div>
+                <div class="container">
+                    <div class="card">
+                        <div class="flex-between mb-4">
+                            <div>
+                                <h1>Training Block Utilization Dashboard</h1>
+                                <p style="color: #64748b;">Viewing ${rawData.length} records</p>
                             </div>
-                            <div class="mt-4 flex gap-2">
-                                <button onclick="setViewMode('weekly')" class="px-6 py-2 rounded-lg font-semibold ${viewMode === 'weekly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}">Weekly View</button>
-                                <button onclick="setViewMode('monthly')" class="px-6 py-2 rounded-lg font-semibold ${viewMode === 'monthly' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'}">Monthly View</button>
+                            <div class="flex flex-gap">
+                                <button onclick="autoLoadFromGitHub()" class="btn btn-purple">⚡ Reload</button>
+                                <button onclick="showUploadScreen()" class="btn btn-primary">📁 Upload</button>
                             </div>
                         </div>
+                        <div class="flex flex-gap">
+                            <button onclick="setViewMode('weekly')" class="btn ${viewMode === 'weekly' ? 'btn-primary' : 'btn-secondary'}">Weekly View</button>
+                            <button onclick="setViewMode('monthly')" class="btn ${viewMode === 'monthly' ? 'btn-primary' : 'btn-secondary'}">Monthly View</button>
+                        </div>
+                    </div>
 
-                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <h2 class="text-xl font-semibold mb-4">🔍 Filters</h2>
-                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div><label class="block text-sm font-medium mb-2">Coach</label>
-                                    <select onchange="updateFilter('coach', this.value)" class="w-full p-2 border rounded-lg">
-                                        <option value="All">All Coaches</option>
-                                        ${options.coaches.map(c => `<option value="${c}" ${filters.coach === c ? 'selected' : ''}>${c}</option>`).join('')}
-                                    </select>
-                                </div>
-                                <div><label class="block text-sm font-medium mb-2">Team</label>
-                                    <select onchange="updateFilter('team', this.value)" class="w-full p-2 border rounded-lg">
-                                        <option value="All">All Teams</option>
-                                        ${options.teams.map(t => `<option value="${t}" ${filters.team === t ? 'selected' : ''}>${t}</option>`).join('')}
-                                    </select>
-                                </div>
-                                <div><label class="block text-sm font-medium mb-2">Subgroup</label>
-                                    <select onchange="updateFilter('subgroup', this.value)" class="w-full p-2 border rounded-lg">
-                                        <option value="All">All Subgroups</option>
-                                        ${options.subgroups.map(s => `<option value="${s}" ${filters.subgroup === s ? 'selected' : ''}>${s}</option>`).join('')}
-                                    </select>
-                                </div>
-                                ${isWeekly ? `
-                                <div><label class="block text-sm font-medium mb-2">Week</label>
-                                    <select onchange="updateFilter('week', this.value)" class="w-full p-2 border rounded-lg">
-                                        <option value="All">All Weeks</option>
-                                        ${options.weeks.map(w => `<option value="${w}" ${filters.week === w ? 'selected' : ''}>${w}</option>`).join('')}
-                                    </select>
-                                </div>` : `
-                                <div><label class="block text-sm font-medium mb-2">Month</label>
-                                    <select onchange="updateFilter('month', this.value)" class="w-full p-2 border rounded-lg">
-                                        <option value="All">All Months</option>
-                                        ${options.months.map(m => `<option value="${m}" ${filters.month === m ? 'selected' : ''}>${m}</option>`).join('')}
-                                    </select>
-                                </div>`}
+                    <div class="card">
+                        <h2>🔍 Filters</h2>
+                        <div class="grid grid-4">
+                            <div><label>Coach</label>
+                                <select onchange="updateFilter('coach', this.value)">
+                                    <option value="All">All Coaches</option>
+                                    ${options.coaches.map(c => `<option value="${c}" ${filters.coach === c ? 'selected' : ''}>${c}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div><label>Team</label>
+                                <select onchange="updateFilter('team', this.value)">
+                                    <option value="All">All Teams</option>
+                                    ${options.teams.map(t => `<option value="${t}" ${filters.team === t ? 'selected' : ''}>${t}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div><label>Subgroup</label>
+                                <select onchange="updateFilter('subgroup', this.value)">
+                                    <option value="All">All Subgroups</option>
+                                    ${options.subgroups.map(s => `<option value="${s}" ${filters.subgroup === s ? 'selected' : ''}>${s}</option>`).join('')}
+                                </select>
+                            </div>
+                            ${isWeekly ? `
+                            <div><label>Week</label>
+                                <select onchange="updateFilter('week', this.value)">
+                                    <option value="All">All Weeks</option>
+                                    ${options.weeks.map(w => `<option value="${w}" ${filters.week === w ? 'selected' : ''}>${w}</option>`).join('')}
+                                </select>
+                            </div>` : `
+                            <div><label>Month</label>
+                                <select onchange="updateFilter('month', this.value)">
+                                    <option value="All">All Months</option>
+                                    ${options.months.map(m => `<option value="${m}" ${filters.month === m ? 'selected' : ''}>${m}</option>`).join('')}
+                                </select>
+                            </div>`}
+                        </div>
+                    </div>
+
+                    <div class="header-purple">
+                        <h2 style="color: white;">Overall ${isWeekly ? 'Weekly' : 'Monthly'} Utilization</h2>
+                        <div class="grid grid-3">
+                            <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Total Training Hours</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.trainingHours}</p></div>
+                            <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Total Block Hours</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.blockHours}</p></div>
+                            <div><p style="color: #c7d2fe; font-size: 0.875rem; margin-bottom: 0.5rem;">Utilization Rate</p><p style="font-size: 2rem; font-weight: bold;">${metrics.overall.utilization || '-'}%</p></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>${isWeekly ? 'Weekly Trend (Last 8 Weeks)' : 'Monthly Trend'}</h3>
+                        <canvas id="trendChart" style="max-height: 300px;"></canvas>
+                    </div>
+
+                    <div class="grid grid-2">
+                        <div class="card"><h3>By Subgroup</h3><canvas id="subgroupChart"></canvas></div>
+                        <div class="card"><h3>By Team</h3><canvas id="teamChart"></canvas></div>
+                    </div>
+
+                    <div class="card">
+                        <h3>By Coach</h3>
+                        <canvas id="coachChart"></canvas>
+                    </div>
+
+                    <div class="grid grid-3">
+                        <div class="card">
+                            <h3>Subgroup Summary</h3>
+                            <div class="overflow-auto">
+                                <table>
+                                    <thead><tr><th>Subgroup</th><th class="text-right">Training</th><th class="text-right">Block</th><th class="text-right">Util %</th></tr></thead>
+                                    <tbody>
+                                        ${metrics.subgroups.map(row => `
+                                            <tr class="${row.name === 'Overall' ? 'highlight-row' : ''}">
+                                                <td>${row.name}</td>
+                                                <td class="text-right">${row.training}</td>
+                                                <td class="text-right">${row.block}</td>
+                                                <td class="text-right">${row.utilization !== '' ? `<span class="${getColor(row.utilization)}">${row.utilization}%</span>` : '<span class="text-gray">-</span>'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-
-                        <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-6 mb-6 text-white">
-                            <h2 class="text-2xl font-bold mb-4">Overall ${isWeekly ? 'Weekly' : 'Monthly'} Utilization</h2>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div><p class="text-indigo-100 text-sm mb-2">Total Training Hours</p><p class="text-3xl font-bold">${metrics.overall.trainingHours}</p></div>
-                                <div><p class="text-indigo-100 text-sm mb-2">Total Block Hours</p><p class="text-3xl font-bold">${metrics.overall.blockHours}</p></div>
-                                <div><p class="text-indigo-100 text-sm mb-2">Utilization Rate</p><p class="text-3xl font-bold">${metrics.overall.utilization || '-'}%</p></div>
+                        <div class="card">
+                            <h3>Team Summary</h3>
+                            <div class="overflow-auto">
+                                <table>
+                                    <thead><tr><th>Team</th><th class="text-right">Training</th><th class="text-right">Block</th><th class="text-right">Util %</th></tr></thead>
+                                    <tbody>
+                                        ${metrics.teams.map(row => `
+                                            <tr>
+                                                <td>${row.name}</td>
+                                                <td class="text-right">${row.training}</td>
+                                                <td class="text-right">${row.block}</td>
+                                                <td class="text-right">${row.utilization !== '' ? `<span class="${getColor(row.utilization)}">${row.utilization}%</span>` : '<span class="text-gray">-</span>'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-
-                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <h3 class="text-lg font-semibold mb-4">${isWeekly ? 'Weekly Trend (Last 8 Weeks)' : 'Monthly Trend'}</h3>
-                            <canvas id="trendChart" style="max-height: 300px;"></canvas>
-                        </div>
-
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                            <div class="bg-white rounded-lg shadow-lg p-6"><h3 class="text-lg font-semibold mb-4">By Subgroup</h3><canvas id="subgroupChart"></canvas></div>
-                            <div class="bg-white rounded-lg shadow-lg p-6"><h3 class="text-lg font-semibold mb-4">By Team</h3><canvas id="teamChart"></canvas></div>
-                        </div>
-
-                        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <h3 class="text-lg font-semibold mb-4">By Coach</h3>
-                            <canvas id="coachChart"></canvas>
-                        </div>
-
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div class="bg-white rounded-lg shadow-lg p-6">
-                                <h3 class="text-lg font-semibold mb-4">Subgroup Summary</h3>
-                                <div class="overflow-auto max-h-96">
-                                    <table class="w-full text-sm">
-                                        <thead class="sticky top-0 bg-slate-100">
-                                            <tr><th class="px-3 py-2 text-left font-semibold">Subgroup</th><th class="px-3 py-2 text-right font-semibold">Training</th><th class="px-3 py-2 text-right font-semibold">Block</th><th class="px-3 py-2 text-right font-semibold">Util %</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            ${metrics.subgroups.map(row => `
-                                                <tr class="border-b hover:bg-slate-50 ${row.name === 'Overall' ? 'bg-blue-50 font-semibold' : ''}">
-                                                    <td class="px-3 py-2">${row.name}</td>
-                                                    <td class="px-3 py-2 text-right">${row.training}</td>
-                                                    <td class="px-3 py-2 text-right">${row.block}</td>
-                                                    <td class="px-3 py-2 text-right">
-                                                        ${row.utilization !== '' ? `<span class="font-semibold ${getColor(row.utilization)}">${row.utilization}%</span>` : '<span class="text-slate-400">-</span>'}
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <div class="bg-white rounded-lg shadow-lg p-6">
-                                <h3 class="text-lg font-semibold mb-4">Team Summary</h3>
-                                <div class="overflow-auto max-h-96">
-                                    <table class="w-full text-sm">
-                                        <thead class="sticky top-0 bg-slate-100">
-                                            <tr><th class="px-3 py-2 text-left font-semibold">Team</th><th class="px-3 py-2 text-right font-semibold">Training</th><th class="px-3 py-2 text-right font-semibold">Block</th><th class="px-3 py-2 text-right font-semibold">Util %</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            ${metrics.teams.map(row => `
-                                                <tr class="border-b hover:bg-slate-50">
-                                                    <td class="px-3 py-2">${row.name}</td>
-                                                    <td class="px-3 py-2 text-right">${row.training}</td>
-                                                    <td class="px-3 py-2 text-right">${row.block}</td>
-                                                    <td class="px-3 py-2 text-right">
-                                                        ${row.utilization !== '' ? `<span class="font-semibold ${getColor(row.utilization)}">${row.utilization}%</span>` : '<span class="text-slate-400">-</span>'}
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <div class="bg-white rounded-lg shadow-lg p-6">
-                                <h3 class="text-lg font-semibold mb-4">Coach Summary</h3>
-                                <div class="overflow-auto max-h-96">
-                                    <table class="w-full text-sm">
-                                        <thead class="sticky top-0 bg-slate-100">
-                                            <tr><th class="px-3 py-2 text-left font-semibold">Coach</th><th class="px-3 py-2 text-right font-semibold">Training</th><th class="px-3 py-2 text-right font-semibold">Block</th><th class="px-3 py-2 text-right font-semibold">Util %</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            ${metrics.coaches.map(row => `
-                                                <tr class="border-b hover:bg-slate-50">
-                                                    <td class="px-3 py-2">${row.name}</td>
-                                                    <td class="px-3 py-2 text-right">${row.training}</td>
-                                                    <td class="px-3 py-2 text-right">${row.block}</td>
-                                                    <td class="px-3 py-2 text-right">
-                                                        ${row.utilization !== '' ? `<span class="font-semibold ${getColor(row.utilization)}">${row.utilization}%</span>` : '<span class="text-slate-400">-</span>'}
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
+                        <div class="card">
+                            <h3>Coach Summary</h3>
+                            <div class="overflow-auto">
+                                <table>
+                                    <thead><tr><th>Coach</th><th class="text-right">Training</th><th class="text-right">Block</th><th class="text-right">Util %</th></tr></thead>
+                                    <tbody>
+                                        ${metrics.coaches.map(row => `
+                                            <tr>
+                                                <td>${row.name}</td>
+                                                <td class="text-right">${row.training}</td>
+                                                <td class="text-right">${row.block}</td>
+                                                <td class="text-right">${row.utilization !== '' ? `<span class="${getColor(row.utilization)}">${row.utilization}%</span>` : '<span class="text-gray">-</span>'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
