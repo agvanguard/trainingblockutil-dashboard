@@ -125,14 +125,12 @@
     <div id="app"></div>
     
     <script>
-        // ================== CONFIGURATION ==================
         const CONFIG = {
             GITHUB_USERNAME: 'agvanguard',
             GITHUB_REPO: 'trainingblockutil-dashboard',
             EXCEL_FILENAME: 'Training Block Report Raw Data.xlsx'
         };
 
-        // ================== STATE MANAGEMENT ==================
         const state = {
             rawData: [],
             filteredData: [],
@@ -152,11 +150,6 @@
             }
         };
 
-        // ================== UTILITY FUNCTIONS ==================
-        
-        /**
-         * Convert Excel serial date to JavaScript Date
-         */
         function excelDateToJSDate(serial) {
             if (!serial || isNaN(serial)) return null;
             const excelEpoch = new Date(1900, 0, 1);
@@ -166,9 +159,6 @@
             return new Date(result.getFullYear(), result.getMonth(), result.getDate());
         }
 
-        /**
-         * Format date as YYYY-MM-DD
-         */
         function formatDate(date) {
             if (!date || !(date instanceof Date)) return null;
             const y = date.getFullYear();
@@ -177,14 +167,10 @@
             return `${y}-${m}-${d}`;
         }
 
-        /**
-         * Parse month string (e.g., "2024 - January") to Date for sorting
-         */
         function parseMonthString(monthStr) {
             if (!monthStr || typeof monthStr !== 'string') return null;
             
-            // Handle format: "YYYY - Month Name"
-            const match = monthStr.match(/(\d{4})\s*-\s*(\w+)/);
+            const match = monthStr.match(/(\d{4})\s*-?\s*(\w+)/);
             if (!match) return null;
             
             const year = parseInt(match[1]);
@@ -193,7 +179,9 @@
             const monthMap = {
                 'January': 0, 'February': 1, 'March': 2, 'April': 3,
                 'May': 4, 'June': 5, 'July': 6, 'August': 7,
-                'September': 8, 'October': 9, 'November': 10, 'December': 11
+                'September': 8, 'October': 9, 'November': 10, 'December': 11,
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'Jun': 5, 'Jul': 6,
+                'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
             };
             
             const monthIndex = monthMap[monthName];
@@ -202,9 +190,6 @@
             return new Date(year, monthIndex, 1);
         }
 
-        /**
-         * Sort month strings chronologically
-         */
         function sortMonths(months) {
             return months.sort((a, b) => {
                 const dateA = parseMonthString(a);
@@ -214,9 +199,6 @@
             });
         }
 
-        /**
-         * Check if value is an Excel error
-         */
         function isErrorValue(val) {
             if (!val) return false;
             const str = String(val).trim();
@@ -225,32 +207,44 @@
                    str === '#NAME?' || str === '#NULL!' || str.startsWith('#');
         }
 
-        /**
-         * Clean string value
-         */
         function cleanValue(val) {
             return (val && !isErrorValue(val)) ? String(val).trim() : "";
         }
 
-        /**
-         * Clean numeric value
-         */
         function cleanNumber(val) {
             if (!val || isErrorValue(val)) return 0;
             const num = parseFloat(val);
             return isNaN(num) ? 0 : num;
         }
 
-        /**
-         * Check if value is valid (not null, empty, or error)
-         */
         function isValidValue(val) {
-            return val && val !== '' && !isErrorValue(val);
+            if (!val || val === '' || isErrorValue(val)) return false;
+            
+            const str = String(val).trim();
+            
+            // Exclude specific header/placeholder values that appear in data
+            const excludeValues = [
+                'Window End', 'Agent Id', 'Agent Name', 'Agent Email',
+                'Year - Month', 'Subgroup', 'Coach', 'Team',
+                'Training Total Hours', 'Total Training Block Hours'
+            ];
+            if (excludeValues.some(ex => str === ex)) return false;
+            
+            // Exclude values that look like Agent IDs (long alphanumeric strings or UUIDs)
+            if (str.length > 30 && /^[a-f0-9-]+$/i.test(str)) return false;
+            
+            // Exclude if it starts with common UUID/GUID patterns
+            if (/^[a-f0-9]{8}-[a-f0-9]{4}-/i.test(str)) return false;
+            
+            // Exclude if it's a timestamp/date string like "2025-11-30T16:00:00Z"
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) return false;
+            
+            // Exclude numeric-only strings longer than 10 characters (likely IDs)
+            if (str.length > 10 && /^\d+$/.test(str)) return false;
+            
+            return true;
         }
 
-        /**
-         * Get color class based on utilization percentage
-         */
         function getUtilizationColor(utilization) {
             if (utilization === '' || utilization === null || utilization === undefined) {
                 return 'text-gray';
@@ -261,31 +255,50 @@
             return 'text-red';
         }
 
-        /**
-         * Calculate utilization percentage
-         */
         function calculateUtilization(training, block) {
             if (!block || block === 0) return '';
             return ((training / block) * 100).toFixed(2);
         }
 
-        // ================== DATA PROCESSING ==================
-
-        /**
-         * Process Excel file data
-         */
         async function processExcelFile(arrayBuffer) {
             try {
                 const workbook = XLSX.read(arrayBuffer);
                 const sheetName = workbook.SheetNames.includes("Raw Data") 
                     ? "Raw Data" 
                     : workbook.SheetNames[0];
-                const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+                
+                const worksheet = workbook.Sheets[sheetName];
+                const range = XLSX.utils.decode_range(worksheet['!ref']);
+                
+                // Debug: Check what's actually in the cells
+                console.log("=== CELL VALUE CHECK ===");
+                console.log("Cell O1 (header):", worksheet['O1']?.v);
+                console.log("Cell O2 (data):", worksheet['O2']?.v);
+                console.log("Cell P1 (header):", worksheet['P1']?.v);
+                console.log("Cell P2 (data):", worksheet['P2']?.v);
+                console.log("Cell T1 (header):", worksheet['T1']?.v);
+                console.log("Cell T2 (data):", worksheet['T2']?.v);
+                console.log("Cell U1 (header):", worksheet['U1']?.v);
+                console.log("Cell U2 (data):", worksheet['U2']?.v);
+                console.log("Cell V1 (header):", worksheet['V1']?.v);
+                console.log("Cell V2 (data):", worksheet['V2']?.v);
+                console.log("Cell W1 (header):", worksheet['W1']?.v);
+                console.log("Cell W2 (data):", worksheet['W2']?.v);
+                console.log("========================");
 
-                state.rawData = data.map(row => {
-                    // Process week start date
+                state.rawData = [];
+                
+                // Start from row 2 (index 1 is header row, index 2+ is data)
+                for (let rowNum = 2; rowNum <= range.e.r; rowNum++) {
+                    const getCellValue = (col) => {
+                        const cellAddress = XLSX.utils.encode_cell({ r: rowNum, c: col });
+                        const cell = worksheet[cellAddress];
+                        return cell ? cell.v : "";
+                    };
+                    
+                    // Column B (index 1) is Week Start
+                    const weekStartValue = getCellValue(1);
                     let weekStartDate = null;
-                    const weekStartValue = row["Week Start"];
                     
                     if (weekStartValue && !isErrorValue(weekStartValue)) {
                         if (typeof weekStartValue === 'number') {
@@ -297,25 +310,36 @@
                         }
                     }
                     
-                    return {
-                        // Weekly data
+                    if (!weekStartDate || isNaN(weekStartDate.getTime())) continue;
+                    
+                    const processedRow = {
+                        // Weekly data (columns A-L = indices 0-11)
                         weekStart: weekStartDate,
-                        weeklyYearMonth: cleanValue(row["Year - Month"]),
-                        weeklySubgroup: cleanValue(row.Subgroup),
-                        weeklyCoach: cleanValue(row.Coach),
-                        weeklyTeam: cleanValue(row.Team),
-                        weeklyTrainingHours: cleanNumber(row["Training Total Hours"]),
-                        weeklyBlockHours: cleanNumber(row["Total Training Block Hours"]),
+                        weeklyYearMonth: cleanValue(getCellValue(0)),      // Column A: Year - Month
+                        weeklySubgroup: cleanValue(getCellValue(2)),       // Column C: Subgroup
+                        weeklyCoach: cleanValue(getCellValue(9)),          // Column J: Coach
+                        weeklyTeam: cleanValue(getCellValue(10)),          // Column K: Team
+                        weeklyTrainingHours: cleanNumber(getCellValue(6)), // Column G: Training Total Hours
+                        weeklyBlockHours: cleanNumber(getCellValue(7)),    // Column H: Total Training Block Hours
                         
-                        // Monthly data
-                        monthlyYearMonth: cleanValue(row["Year - Month"]),
-                        monthlySubgroup: cleanValue(row.Subgroup),
-                        monthlyCoach: cleanValue(row.Coach),
-                        monthlyTeam: cleanValue(row.Team),
-                        monthlyTrainingHours: cleanNumber(row["Training Total Hours"]),
-                        monthlyBlockHours: cleanNumber(row["Total Training Block Hours"])
+                        // Monthly data (columns O-W = indices 14-22)
+                        monthlyYearMonth: cleanValue(getCellValue(14)),      // Column O: Year - Month
+                        monthlySubgroup: cleanValue(getCellValue(15)),       // Column P: Subgroup
+                        monthlyCoach: cleanValue(getCellValue(21)),          // Column V: Coach
+                        monthlyTeam: cleanValue(getCellValue(22)),           // Column W: Team
+                        monthlyTrainingHours: cleanNumber(getCellValue(19)), // Column T: Training Total Hours
+                        monthlyBlockHours: cleanNumber(getCellValue(20))     // Column U: Total Training Block Hours
                     };
-                }).filter(row => row.weekStart && !isNaN(row.weekStart.getTime()));
+                    
+                    // Only add row if it has valid data
+                    // Skip rows where monthly year-month looks like a header or invalid value
+                    const invalidMonthValues = ['Agent Id', 'Window End', 'Year - Month'];
+                    if (invalidMonthValues.includes(processedRow.monthlyYearMonth)) {
+                        continue; // Skip this row
+                    }
+                    
+                    state.rawData.push(processedRow);
+                }
 
                 state.filteredData = [...state.rawData];
                 renderDashboard();
@@ -324,11 +348,6 @@
             }
         }
 
-        // ================== FILTERING ==================
-
-        /**
-         * Get filter options based on current view mode
-         */
         function getFilterOptions() {
             const isWeekly = state.viewMode === 'weekly';
             
@@ -357,7 +376,6 @@
                     .filter(Boolean)
             )].sort();
             
-            // Get months and sort chronologically
             const months = [...new Set(
                 state.rawData
                     .map(d => isWeekly ? d.weeklyYearMonth : d.monthlyYearMonth)
@@ -369,9 +387,6 @@
             return { coaches, teams, subgroups, weeks, months: sortedMonths };
         }
 
-        /**
-         * Apply filters to data
-         */
         function applyFilters() {
             const isWeekly = state.viewMode === 'weekly';
             state.filteredData = [...state.rawData];
@@ -409,17 +424,11 @@
             renderDashboard();
         }
 
-        /**
-         * Update a specific filter
-         */
         function updateFilter(key, value) {
             state.filters[key] = value;
             applyFilters();
         }
 
-        /**
-         * Set view mode (weekly/monthly)
-         */
         function setViewMode(mode) {
             state.viewMode = mode;
             state.filters.month = 'All';
@@ -427,11 +436,6 @@
             applyFilters();
         }
 
-        // ================== METRICS CALCULATION ==================
-
-        /**
-         * Calculate all metrics for current filtered data
-         */
         function calculateMetrics() {
             if (state.filteredData.length === 0) {
                 return {
@@ -449,7 +453,6 @@
             
             const isWeekly = state.viewMode === 'weekly';
             
-            // Calculate overall totals
             const totalTraining = state.filteredData.reduce((sum, d) => 
                 sum + (isWeekly ? d.weeklyTrainingHours : d.monthlyTrainingHours), 0
             );
@@ -457,14 +460,12 @@
                 sum + (isWeekly ? d.weeklyBlockHours : d.monthlyBlockHours), 0
             );
 
-            // Calculate by subgroup
             const subgroups = calculateGroupMetrics(
                 state.filteredData,
                 isWeekly ? 'weeklySubgroup' : 'monthlySubgroup',
                 isWeekly
             );
 
-            // Add overall row to subgroups
             const subgroupOverall = {
                 name: 'Overall',
                 training: totalTraining.toFixed(1),
@@ -472,23 +473,20 @@
                 utilization: calculateUtilization(totalTraining, totalBlock)
             };
 
-            // Calculate by team
             const teams = calculateGroupMetrics(
                 state.filteredData,
                 isWeekly ? 'weeklyTeam' : 'monthlyTeam',
                 isWeekly,
-                30 // max name length
+                30
             );
 
-            // Calculate by coach
             const coaches = calculateGroupMetrics(
                 state.filteredData,
                 isWeekly ? 'weeklyCoach' : 'monthlyCoach',
                 isWeekly,
-                25 // max name length
+                25
             );
 
-            // Calculate trend data
             const trend = calculateTrendData(state.filteredData, isWeekly);
 
             return {
@@ -504,9 +502,6 @@
             };
         }
 
-        /**
-         * Calculate metrics grouped by a specific field
-         */
         function calculateGroupMetrics(data, groupField, isWeekly, maxNameLength = null) {
             const groups = {};
             
@@ -542,9 +537,6 @@
                 });
         }
 
-        /**
-         * Calculate trend data over time
-         */
         function calculateTrendData(data, isWeekly) {
             const timeGroups = {};
             
@@ -568,12 +560,9 @@
                 utilization: calculateUtilization(data.training, data.block) || '0'
             }));
 
-            // Sort trend data
             if (isWeekly) {
-                // Sort weekly data by date
                 trend.sort((a, b) => a.time.localeCompare(b.time));
                 
-                // For weekly view, show last 8 weeks
                 if (trend.length > 0) {
                     const latestWeek = state.filters.week !== 'All' 
                         ? state.filters.week 
@@ -584,7 +573,6 @@
                     }
                 }
             } else {
-                // Sort monthly data chronologically
                 trend.sort((a, b) => {
                     const dateA = parseMonthString(a.time);
                     const dateB = parseMonthString(b.time);
@@ -596,11 +584,6 @@
             return trend;
         }
 
-        // ================== UI RENDERING ==================
-
-        /**
-         * Show upload screen
-         */
         function showUploadScreen() {
             const downloadUrl = `https://raw.githubusercontent.com/${CONFIG.GITHUB_USERNAME}/${CONFIG.GITHUB_REPO}/main/${encodeURIComponent(CONFIG.EXCEL_FILENAME)}`;
             
@@ -638,9 +621,6 @@
             `;
         }
 
-        /**
-         * Show loading screen
-         */
         function showLoadingScreen(message, subtitle = '') {
             document.getElementById('app').innerHTML = `
                 <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
@@ -653,9 +633,6 @@
             `;
         }
 
-        /**
-         * Show error screen
-         */
         function showError(message) {
             document.getElementById('app').innerHTML = `
                 <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem;">
@@ -669,9 +646,6 @@
             `;
         }
 
-        /**
-         * Render the main dashboard
-         */
         function renderDashboard() {
             const options = getFilterOptions();
             const metrics = calculateMetrics();
@@ -802,9 +776,6 @@
             setTimeout(() => renderCharts(metrics), 100);
         }
 
-        /**
-         * Render summary table
-         */
         function renderSummaryTable(title, data) {
             return `
                 <div class="card">
@@ -839,16 +810,11 @@
             `;
         }
 
-        /**
-         * Render all charts
-         */
         function renderCharts(metrics) {
-            // Destroy existing charts
             Object.values(state.charts).forEach(chart => {
                 if (chart) chart.destroy();
             });
 
-            // Trend Chart
             if (document.getElementById('trendChart')) {
                 const trendData = metrics.trend.filter(d => d.utilization !== '');
                 state.charts.trend = new Chart(document.getElementById('trendChart'), {
@@ -886,7 +852,6 @@
                 });
             }
 
-            // Subgroup Chart
             if (document.getElementById('subgroupChart')) {
                 const subgroupData = metrics.subgroups.filter(s => 
                     s.utilization !== '' && s.name !== 'Overall'
@@ -921,7 +886,6 @@
                 });
             }
 
-            // Team Chart
             if (document.getElementById('teamChart')) {
                 const teamData = metrics.teams.filter(t => t.utilization !== '');
                 state.charts.team = new Chart(document.getElementById('teamChart'), {
@@ -954,7 +918,6 @@
                 });
             }
 
-            // Coach Chart
             if (document.getElementById('coachChart')) {
                 const coachData = metrics.coaches.filter(c => c.utilization !== '');
                 state.charts.coach = new Chart(document.getElementById('coachChart'), {
@@ -988,11 +951,6 @@
             }
         }
 
-        // ================== FILE LOADING ==================
-
-        /**
-         * Auto-load data from GitHub
-         */
         async function autoLoadFromGitHub() {
             showLoadingScreen('Auto-Loading Latest Data...', 'Fetching from GitHub');
 
@@ -1011,9 +969,6 @@
             }
         }
 
-        /**
-         * Handle manual file upload
-         */
         async function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -1028,7 +983,6 @@
             }
         }
 
-        // ================== INITIALIZATION ==================
         showUploadScreen();
     </script>
 </body>
